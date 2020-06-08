@@ -14,8 +14,8 @@ impl Component for Pos {
 }
 
 #[derive(Debug)]
-struct Azimuth(f32);
-impl Component for Azimuth {
+struct Signature(f32);
+impl Component for Signature {
     type Storage = VecStorage<Self>;
 }
 
@@ -32,19 +32,18 @@ impl<'a> System<'a> for RadarSensing {
     // You can also define a struct and `#[derive(SystemData)]`,
     // see the `full` example.
     type SystemData = (
-        Entities<'a>,
-        WriteStorage<'a, Range>, 
-        ReadStorage<'a, Pos>);
+        ReadStorage<'a, Pos>,
+        ReadStorage<'a, Signature>,
+    );
 
-    fn run(&mut self, (entities, mut pos, targ): Self::SystemData) {
+    fn run(&mut self, (pos, sig): Self::SystemData) {
         // The `.join()` combines multiple components,
         // so we only access those entities which have
         // both of them.
         // You could also use `par_join()` to get a rayon `ParallelIterator`.
-        for (pos, targ) in (&mut pos, &targ).join() {
-            if(pos.x !)
-            println!("X: {}", pos.x);
-            println!("Y: {}\n", pos.y);
+        for (pos, sig) in (&pos, &sig).join() {
+            println!("Position: {}", pos.x);
+            println!("Signature: {}", sig.0);
 
         }
     }
@@ -57,7 +56,7 @@ fn main() {
 
     let mut world = World::new();
 
-    // This builds a dispatcher.
+    // This builds a dispatcher
     // The third parameter of `add` specifies
     // logical dependencies on other systems.
     // Since we only have one, we don't depend on anything.
@@ -70,8 +69,8 @@ fn main() {
 
     // An entity may or may not contain some component
     // This entity does not have `Vel`, so it won't be dispatched.
-    let radar = world.create_entity().with(Pos{x: 0.0, y: 0.0}).with(Targets{v: Vec::new()}).build();
-    let target = world.create_entity().with(Pos{x: 10.0, y: 20.0}).build();
+    let radar = world.create_entity().with(Pos{x: 0.0, y: 0.0, z: 1.0}).build();
+    let target = world.create_entity().with(Pos{x: 10.0, y: 20.0, z: 1.0}).with(Signature{0: 10.0}).build();
 
     // This dispatches all the systems in parallel (but blocking).
     dispatcher.dispatch(&world);
