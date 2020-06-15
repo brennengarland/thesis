@@ -25,6 +25,13 @@ impl Component for Range {
     type Storage = VecStorage<Self>;
 }
 
+struct Targets {
+    targ_array: Vec<f32>,
+}
+impl Component for Targets {
+    type Storage = VecStorage<Self>;
+}
+
 
 struct RadarSensing;
 impl<'a> System<'a> for RadarSensing {
@@ -34,16 +41,25 @@ impl<'a> System<'a> for RadarSensing {
     type SystemData = (
         ReadStorage<'a, Pos>,
         ReadStorage<'a, Signature>,
+        WriteStorage<'a, Targets>,
     );
 
-    fn run(&mut self, (pos, sig): Self::SystemData) {
+        fn run(&mut self, (pos, sig, mut targ): Self::SystemData) {
         // The `.join()` combines multiple components,
         // so we only access those entities which have
         // both of them.
         // You could also use `par_join()` to get a rayon `ParallelIterator`.
-        for (pos, sig) in (&pos, &sig).join() {
-            println!("Position: {}", pos.x);
-            println!("Signature: {}", sig.0);
+        for (targ) in (&mut targ).join() {
+            for(pos, sig) in (&pos, &sig).join() {
+                println!("Position: {}", pos.x);
+                println!("Signature: {}", sig.0);
+
+                // Begin range equation
+                let c = 299792458.0;
+                let d_t = 1.0;     // Delta t (s)
+                let range = (c*d_t) / 2.0;
+                targ.targ_array.push(range);
+            }
 
         }
     }
@@ -69,7 +85,7 @@ fn main() {
 
     // An entity may or may not contain some component
     // This entity does not have `Vel`, so it won't be dispatched.
-    let radar = world.create_entity().with(Pos{x: 0.0, y: 0.0, z: 1.0}).build();
+    let radar = world.create_entity().with(Pos{x: 0.0, y: 0.0, z: 1.0}).with(Targets{targ_array: Vec::new()}).build();
     let target = world.create_entity().with(Pos{x: 10.0, y: 20.0, z: 1.0}).with(Signature{0: 10.0}).build();
 
     // This dispatches all the systems in parallel (but blocking).
