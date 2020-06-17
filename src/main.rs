@@ -118,13 +118,13 @@ fn main() {
     // This dispatches all the systems in parallel (but blocking)
     let one_sec = time::Duration::from_secs(1);
     loop {
-        // let start = time::Instant::now();
+        let start = time::Instant::now();
         dispatcher.dispatch(&world);
         world.maintain();
-        // let sleep_time = one_sec.checked_sub(time::Instant::now().duration_since(start));
-        // if sleep_time != None {
-        //     thread::sleep(sleep_time);
-        // }
-        thread::sleep(one_sec);
+        let sleep_time = one_sec.checked_sub(time::Instant::now().duration_since(start));
+        if sleep_time != None {
+            thread::sleep(sleep_time.unwrap());
+        }
+        // thread::sleep(one_sec);
     }
 }
