@@ -1,6 +1,7 @@
 // extern crate specs;
 
 use specs::prelude::*;
+use specs::Entities;
 use std::{thread, time, num};
 
 
@@ -54,25 +55,46 @@ impl Component for Velocity {
     type Storage = VecStorage<Self>;
 }
 
+#[derive(Debug)]
+struct Emission {
+    p_t: f32,
+    lambda: f32,
+    frequency: f32,
+    gain: f32,
+}
+impl Component for Emission {
+    type Storage = VecStorage<Self>;
+}
+
 struct TransmitSignal;
 impl<'a> System<'a> for TransmitSignal {
     type SystemData = (
         ReadStorage<'a, Sensor>,
-        ReadStorage<'a, Position>,
+        WriteStorage<'a, Emission>,
+        WriteStorage<'a, Position>,
+        Entities<'a>,
+        Read<'a, LazyUpdate>
     );
 
-    fn run(&mut self, (sen, pos): Self::SystemData) {
-        for (pos, sen) in (&pos, &sen).join() {
+    fn run(&mut self, (sensors, mut emissions, mut positions, entities, updater): Self::SystemData) {
+        // Must Read from each radar system and save values, then create the new emission afterwards
+        // because we cannot iterate over positions and write to them at the same time.
+        let mut new_positions: Vec<Position> = Vec::new();
+        let mut new_emissions: Vec<Emission> = Vec::new();
+        for (sen, pos) in (&sensors, &mut positions).join() {
+            let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
+            let emission = Emission{p_t: sen.p_t, lambda: sen.lambda, frequency: sen.frequency, gain: sen.gain};
 
-            let frame_rate = 16.6; // ms
-            let listen_time = 0.001; // ms
-            let total_time = listen_time + (sen.pulse_width/1000.0);
-
-            let num_pulses = frame_rate / total_time;
-
-            // println!("Total Time: {}\nNum Pulses: {}", total_time, num_pulses);
-
+            new_positions.push(position);
+            new_emissions.push(emission);
         }
+
+        while new_positions.len() != 0 {
+            let new_entity = entities.create();
+            positions.insert(new_entity, new_positions.remove(0));
+            emissions.insert(new_entity, new_emissions.remove(0));
+        }
+
     }
 }
 
