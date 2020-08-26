@@ -61,6 +61,7 @@ struct Emission {
     lambda: f32,
     frequency: f32,
     gain: f32,
+    width: f32,     // Degrees
 }
 impl Component for Emission {
     type Storage = VecStorage<Self>;
@@ -81,20 +82,22 @@ impl<'a> System<'a> for TransmitSignal {
         let mut new_positions: Vec<Position> = Vec::new();
         let mut new_emissions: Vec<Emission> = Vec::new();
         for (sen, pos) in (&sensors, &mut positions).join() {
-            let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
-            let emission = Emission{p_t: sen.p_t, lambda: sen.lambda, frequency: sen.frequency, gain: sen.gain};
+            // println!("\nRadar Direction: {}", pos.direction);
 
+            let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
+            let emission = Emission{p_t: sen.p_t, lambda: sen.lambda, frequency: sen.frequency, gain: sen.gain, width: sen.azimuth_beam};
+            // println!("Emission Direction: {}", position.direction);
             new_positions.push(position);
             new_emissions.push(emission);
         }
 
         while new_positions.len() != 0 {
             let new_entity = entities.create();
-            println!("Number of positions: {}", new_positions.len());
-            positions.insert(new_entity, new_positions.remove(0));
+            let position = new_positions.remove(0);
+            // println!("Emission Direction: {}", position.direction);
+            positions.insert(new_entity, position);
             emissions.insert(new_entity, new_emissions.remove(0));
         }
-        println!("Number of positions: {}", new_positions.len());
 
     }
 }
@@ -105,46 +108,54 @@ impl<'a> System<'a> for RadarSensing {
     type SystemData = (
         ReadStorage<'a, Position>,
         ReadStorage<'a, Signature>,
-        ReadStorage<'a, Sensor>,
+        ReadStorage<'a, Emission>,
+        Entities<'a>,
     );
 
 
-    fn run(&mut self, (pos, sig, sen): Self::SystemData) {
+    fn run(&mut self, (positions, signatures, emissions, entities): Self::SystemData) {
         let thresholdPower = 0.0;
 
         // Loops through entities with only a sensor and posiiton
-        for (sen, radar_pos) in (&sen, &pos).join() {
-
-            let max_angle = (radar_pos.direction + (sen.azimuth_beam / 2.0)) % 360.0 ;
-            let min_angle = radar_pos.direction - (sen.azimuth_beam / 2.0) % 360.0 ;
-
+        println!("\n");
+        for (ent, emission, emission_origin) in (&*entities, &emissions, &positions).join() {
+            // println!("Emission Direction: {}", emission_origin.direction);
             // Loops through entities with only a position and signiturepul
-            for(pos, sig) in (&pos, &sig).join() {
+            for(targ_pos, sig) in (&positions, &signatures).join() {
 
-                let y = pos.y - radar_pos.y;
-                let x = pos.x - radar_pos.x;
+                let y = targ_pos.y - emission_origin.y;
+                let x = targ_pos.x - emission_origin.x;
                 // Angle from poition to target along the x-axis. So, anything +y will have a positive angle, -y will have neg angle.
                 let mut targ_angle = y.atan2(x) * (180.0 / 3.14159265358979323846);
 
                 if targ_angle < 0.0 { targ_angle = 360.0 + targ_angle;}
 
+                let mut target_hit = false;
+
                 // Is the target in the beam-width
-                if (radar_pos.direction + sen.azimuth_beam) >= 360.0 || (radar_pos.direction - sen.azimuth_beam) <= 0.0 {
-                    if (360.0 % (targ_angle - radar_pos.direction).abs()) <= (sen.azimuth_beam / 2.0) {
-                        println!("Radar Found!\nTarget Angle: {}\nRadar Direction: {}", targ_angle, radar_pos.direction);
+                // If the emission width crosses the x-axis from either side
+                if (emission_origin.direction + emission.width) >= 360.0 || (emission_origin.direction - emission.width) <= 0.0 {
+                    if (360.0 % (targ_angle - emission_origin.direction).abs()) <= (emission.width / 2.0) {
+                        target_hit = true;
                     }
-                } else if (targ_angle - radar_pos.direction).abs() <= (sen.azimuth_beam / 2.0)  {
-                    println!("Radar Found!\nTarget Angle: {}\nRadar Direction: {}", targ_angle, radar_pos.direction);
+                } else if (targ_angle - emission.width).abs() <= (emission.width / 2.0)  {
+                    target_hit = true;
                 }
 
-                // Power received: Pr = (Pt * G^2 * lambda^2 * rcs) / ((4pi)^3 * R^4)
-                let r = ((radar_pos.x - pos.x).powi(2) + (radar_pos.y - pos.y).powi(2)).sqrt();
-
-                let p_r = (sen.p_t * sen.gain.powi(2) * sig.0 * sen.lambda.powi(2) * 10.0_f32.powi(14)) / (1984.4017 * r.powi(4));
-
-                // println!("Received Power: {}", p_r);
+                if target_hit {
+                    println!("\nFound Target!\nRadar Direction: {}\nRadar Width: {}\nTarget Location: {}", emission_origin.direction, emission.width, targ_angle);
+                    // Power received: Pr = (Pt * G^2 * lambda^2 * rcs) / ((4pi)^3 * R^4)
+                    let r = ((emission_origin.x - targ_pos.x).powi(2) + (emission_origin.y - targ_pos.y).powi(2)).sqrt();
+    
+                    let p_r = (emission.p_t * emission.gain.powi(2) * sig.0 * emission.lambda.powi(2) * 10.0_f32.powi(14)) / (1984.4017 * r.powi(4));
+                    println!("Received Power: {}", p_r);
+                }
             }
-
+            
+            match entities.delete(ent) {
+                Ok(r) => r,
+                Err(e) => eprintln!("Error!\n {}", e),
+            }
         }
     }
 }
@@ -179,7 +190,10 @@ impl<'a> System<'a> for Movement {
 fn main() {
 
     let mut world = World::new();
-    let mut dispatcher = DispatcherBuilder::new().with(RadarSensing, "radar_sensing", &[]).with(TransmitSignal, "transmit_signal", &[]).with(Movement, "movement", &[]).build();
+    let mut dispatcher = DispatcherBuilder::new()
+    .with(TransmitSignal, "transmit_signal", &[])
+    .with(RadarSensing, "radar_sensing", &["transmit_signal"])
+    .with(Movement, "movement", &[]).build();
     dispatcher.setup(&mut world);
 
     // INPUTS FOR RADAR SENSOR
@@ -214,6 +228,7 @@ fn main() {
     loop {
         let start = time::Instant::now();
         dispatcher.dispatch(&world);
+        world.maintain();
         // Create frame_rate loop
         let sleep_time = runtime.checked_sub(time::Instant::now().duration_since(start));
         if sleep_time != None {
