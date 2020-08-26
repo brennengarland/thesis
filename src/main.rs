@@ -73,10 +73,9 @@ impl<'a> System<'a> for TransmitSignal {
         WriteStorage<'a, Emission>,
         WriteStorage<'a, Position>,
         Entities<'a>,
-        Read<'a, LazyUpdate>
     );
 
-    fn run(&mut self, (sensors, mut emissions, mut positions, entities, updater): Self::SystemData) {
+    fn run(&mut self, (sensors, mut emissions, mut positions, entities): Self::SystemData) {
         // Must Read from each radar system and save values, then create the new emission afterwards
         // because we cannot iterate over positions and write to them at the same time.
         let mut new_positions: Vec<Position> = Vec::new();
@@ -91,9 +90,11 @@ impl<'a> System<'a> for TransmitSignal {
 
         while new_positions.len() != 0 {
             let new_entity = entities.create();
+            println!("Number of positions: {}", new_positions.len());
             positions.insert(new_entity, new_positions.remove(0));
             emissions.insert(new_entity, new_emissions.remove(0));
         }
+        println!("Number of positions: {}", new_positions.len());
 
     }
 }
