@@ -1,8 +1,9 @@
 // extern crate specs;
 
 use specs::prelude::*;
-use specs::Entities;
-use std::{thread, time, num};
+use specs::{Component, Entities};
+use std::{thread, time};
+use specs::Join;
 
 
 #[derive(Debug)]
@@ -17,15 +18,8 @@ impl Component for Position {
 }
 
 #[derive(Debug)]
-struct Signature(f32);
-impl Component for Signature {
-    type Storage = VecStorage<Self>;
-}
-
-struct Targets {
-    targ_array: Vec<f32>,
-}
-impl Component for Targets {
+struct RCS(f32);
+impl Component for RCS {
     type Storage = VecStorage<Self>;
 }
 
@@ -45,27 +39,43 @@ impl Component for Sensor {
 }
 
 // m/s
-#[derive(Debug)]
-struct Velocity {
-    x: f32,
-    y: f32,
-    z: f32,
-}
-impl Component for Velocity {
-    type Storage = VecStorage<Self>;
-}
+// #[derive(Debug)]
+// struct Velocity {
+//     x: f32,
+//     y: f32,
+//     z: f32,
+// }
+// impl Component for Velocity {
+//     type Storage = VecStorage<Self>;
+// }
 
 #[derive(Debug)]
 struct Emission {
-    p_t: f32,
+    power: f32,
     lambda: f32,
     frequency: f32,
-    gain: f32,
     width: f32,     // Degrees
 }
 impl Component for Emission {
     type Storage = VecStorage<Self>;
 }
+
+#[derive(Debug)]
+struct Illumniation {
+    power_density: f32,
+    lambda: f32,
+    frequency: f32,
+    angle: f32,
+}
+
+struct TargetIllumniation {
+    illuminations: Vec<Illumniation>,
+}
+
+impl Component for TargetIllumniation {
+    type Storage = VecStorage<Self>;
+}
+
 
 struct TransmitSignal;
 impl<'a> System<'a> for TransmitSignal {
@@ -85,7 +95,7 @@ impl<'a> System<'a> for TransmitSignal {
             // println!("\nRadar Direction: {}", pos.direction);
 
             let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
-            let emission = Emission{p_t: sen.p_t, lambda: sen.lambda, frequency: sen.frequency, gain: sen.gain, width: sen.azimuth_beam};
+            let emission = Emission{power: (sen.p_t*sen.gain), lambda: sen.lambda, frequency: sen.frequency, width: sen.azimuth_beam};
             // println!("Emission Direction: {}", position.direction);
             new_positions.push(position);
             new_emissions.push(emission);
@@ -93,43 +103,42 @@ impl<'a> System<'a> for TransmitSignal {
 
         while new_positions.len() != 0 {
             let new_entity = entities.create();
-            let position = new_positions.remove(0);
             // println!("Emission Direction: {}", position.direction);
-            positions.insert(new_entity, position);
+            positions.insert(new_entity, new_positions.remove(0));
             emissions.insert(new_entity, new_emissions.remove(0));
         }
 
     }
 }
 
-// Simulating the radar sensor
-struct RadarSensing;
-impl<'a> System<'a> for RadarSensing {
+// Detects Interactions
+struct InteractionDetection;
+impl<'a> System<'a> for InteractionDetection {
     type SystemData = (
         ReadStorage<'a, Position>,
-        ReadStorage<'a, Signature>,
         ReadStorage<'a, Emission>,
+        WriteStorage<'a, TargetIllumniation>,
         Entities<'a>,
     );
 
 
-    fn run(&mut self, (positions, signatures, emissions, entities): Self::SystemData) {
-        let thresholdPower = 0.0;
+    fn run(&mut self, (positions, emissions, mut absorption, entities): Self::SystemData) {
+        // let threshold_power = 0.0;
 
         // Loops through entities with only a sensor and posiiton
-        println!("\n");
+        // println!("\n");
         for (ent, emission, emission_origin) in (&*entities, &emissions, &positions).join() {
             // println!("Emission Direction: {}", emission_origin.direction);
             // Loops through entities with only a position and signiturepul
-            for(targ_pos, sig) in (&positions, &signatures).join() {
+            for(targ_pos, absorption) in (&positions, &mut absorption).join() {
 
                 let y = targ_pos.y - emission_origin.y;
                 let x = targ_pos.x - emission_origin.x;
-                // Angle from poition to target along the x-axis. So, anything +y will have a positive angle, -y will have neg angle.
+                // Angle from poition to target along the x-axi&*s. So, anything +y will have a positive angle, -y will have neg angle.
                 let mut targ_angle = y.atan2(x) * (180.0 / 3.14159265358979323846);
-
+                // Set angle to correct value between 0 and 360
                 if targ_angle < 0.0 { targ_angle = 360.0 + targ_angle;}
-
+                // println!("target_angle: {}", targ_angle);
                 let mut target_hit = false;
 
                 // Is the target in the beam-width
@@ -138,6 +147,7 @@ impl<'a> System<'a> for RadarSensing {
                     if (360.0 % (targ_angle - emission_origin.direction).abs()) <= (emission.width / 2.0) {
                         target_hit = true;
                     }
+                // Else the emission does not cross he x-axis, just check if it's in the arc
                 } else if (targ_angle - emission.width).abs() <= (emission.width / 2.0)  {
                     target_hit = true;
                 }
@@ -145,10 +155,15 @@ impl<'a> System<'a> for RadarSensing {
                 if target_hit {
                     println!("\nFound Target!\nRadar Direction: {}\nRadar Width: {}\nTarget Location: {}", emission_origin.direction, emission.width, targ_angle);
                     // Power received: Pr = (Pt * G^2 * lambda^2 * rcs) / ((4pi)^3 * R^4)
-                    let r = ((emission_origin.x - targ_pos.x).powi(2) + (emission_origin.y - targ_pos.y).powi(2)).sqrt();
+                    let range = ((emission_origin.x - targ_pos.x).powi(2) + (emission_origin.y - targ_pos.y).powi(2)).sqrt();
     
-                    let p_r = (emission.p_t * emission.gain.powi(2) * sig.0 * emission.lambda.powi(2) * 10.0_f32.powi(14)) / (1984.4017 * r.powi(4));
-                    println!("Received Power: {}", p_r);
+                    // let p_r = (emission.p_t * emission.gain.powi(2) * sig.0 * emission.lambda.powi(2) * 10.0_f32.powi(14)) / (1984.4017 * range.powi(4));
+                    // let tot_v = (targ_vel.x.powi(2) + targ_vel.y.powi(2)).sqrt();
+                    // let f_r = (1.0 + 2.0 * (tot_v / 300000000.0)) * emission.frequency;
+                    // println!("Received Power: {}\nReceived Frequency: {}", p_r, f_r);
+                    let power_density = emission.power / (4.0 * 3.14 * range.powi(2));
+                    let new_abs = Illumniation{power_density: power_density, lambda: emission.lambda, frequency: emission.frequency, angle: targ_angle};
+                    absorption.illuminations.push(new_abs);
                 }
             }
             
@@ -156,6 +171,44 @@ impl<'a> System<'a> for RadarSensing {
                 Ok(r) => r,
                 Err(e) => eprintln!("Error!\n {}", e),
             }
+        }
+    }
+}
+
+// Creates an emission from the absorption information
+struct ReflectionSystem;
+impl<'a> System<'a> for ReflectionSystem {
+    type SystemData = (
+        WriteStorage<'a, TargetIllumniation>,
+        WriteStorage<'a, Emission>,
+        WriteStorage<'a, Position>,
+        ReadStorage <'a, RCS>,
+        Entities<'a>,
+    );
+
+    fn run(&mut self, (mut target_illumination, mut emission, mut position, rcs, entities) : Self::SystemData) {
+        
+        let mut new_positions: Vec<Position> = Vec::new();
+        let mut new_emissions: Vec<Emission> = Vec::new();
+        // Iterate through each target
+        for (target, pos, target_rcs) in (&mut target_illumination, &position, &rcs).join() {
+            for ill in target.illuminations.iter() {
+                println!("New Absorption Angle: {}", ill.angle);
+                let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
+                let p_r = ill.power_density * target_rcs.0;
+                let emission = Emission{power: p_r, lambda: ill.lambda, frequency: ill.frequency, width: 0.0};
+                // println!("Emission Direction: {}", position.direction);
+                new_positions.push(position);
+                new_emissions.push(emission);
+            }
+            target.illuminations.clear();
+        }
+
+        while new_positions.len() != 0 {
+            let new_entity = entities.create();
+            // println!("Emission Direction: {}", position.direction);
+            position.insert(new_entity, new_positions.remove(0));
+            emission.insert(new_entity, new_emissions.remove(0));
         }
     }
 }
@@ -179,7 +232,7 @@ impl<'a> System<'a> for Movement {
             //     sensor.azimuth_beam = sensor.azimuth_beam*-1.0;
             //     position.direction += sensor.azimuth_beam*2.0;
             // } 
-            position.direction = (position.direction + sensor.azimuth_beam) % 360.0;
+            position.direction = (position.direction + sensor.azimuth_beam) % max_direction;
 
             // println!("Radar Direction: {}", position.direction);
 
@@ -192,7 +245,8 @@ fn main() {
     let mut world = World::new();
     let mut dispatcher = DispatcherBuilder::new()
     .with(TransmitSignal, "transmit_signal", &[])
-    .with(RadarSensing, "radar_sensing", &["transmit_signal"])
+    .with(InteractionDetection, "radar_sensing", &["transmit_signal"])
+    .with(ReflectionSystem, "reflection_creation", &["radar_sensing"])
     .with(Movement, "movement", &[]).build();
     dispatcher.setup(&mut world);
 
@@ -202,7 +256,7 @@ fn main() {
     let frequency = 9400000000.0;   // Hz
 
     // TARGET INFO
-    let rcs = 1.0;                 // m^2
+    // let rcs = 1.0;                 // m^2
     let targ_x = 50000.0;          // m from sensor
     let targ_y = -100.0;
     let targ_z = 0.0;
@@ -219,7 +273,12 @@ fn main() {
         dwell_time: 10.0,
         }).build();
 
-    let _target1 = world.create_entity().with(Position{x: targ_x, y: targ_y, z: targ_z, direction: 0.0}).with(Signature{0: rcs}).build();
+    let _target1 = world.create_entity()
+    .with(Position{x: targ_x, y: targ_y, z: targ_z, direction: 0.0})
+    // .with(Signature{0: rcs})
+    // .with(Velocity{x: 0.0, y: 0.0, z: 0.0})
+    .with(TargetIllumniation{illuminations: Vec::new(),})
+    .build();
 
 
     let runtime = time::Duration::from_secs(1);
