@@ -24,7 +24,7 @@ impl Component for RCS {
 }
 
 #[derive(Debug)]
-struct Sensor {
+struct Antenna {
     frequency: f32,         // Hz
     gain: f32,              // w / w
     p_t: f32,               // Watts
@@ -34,7 +34,7 @@ struct Sensor {
     azimuth_beam: f32,      // degrees
     dwell_time: f32,        // milliseconds
 }
-impl Component for Sensor {
+impl Component for Antenna {
     type Storage = VecStorage<Self>;
 }
 
@@ -80,7 +80,7 @@ impl Component for TargetIllumniation {
 struct TransmitSignal;
 impl<'a> System<'a> for TransmitSignal {
     type SystemData = (
-        ReadStorage<'a, Sensor>,
+        ReadStorage<'a, Antenna>,
         WriteStorage<'a, Emission>,
         WriteStorage<'a, Position>,
         Entities<'a>,
@@ -122,18 +122,18 @@ impl<'a> System<'a> for InteractionDetection {
     );
 
 
-    fn run(&mut self, (positions, emissions, mut absorption, entities): Self::SystemData) {
+    fn run(&mut self, (positions, emissions, mut illumination, entities): Self::SystemData) {
         // let threshold_power = 0.0;
 
         // Loops through entities with only a sensor and posiiton
         // println!("\n");
-        for (ent, emission, emission_origin) in (&*entities, &emissions, &positions).join() {
+        for (em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
             // println!("Emission Direction: {}", emission_origin.direction);
             // Loops through entities with only a position and signiturepul
-            for(targ_pos, absorption) in (&positions, &mut absorption).join() {
+            for(targ_pos, ill) in (&positions, &mut illumination).join() {
 
-                let y = targ_pos.y - emission_origin.y;
-                let x = targ_pos.x - emission_origin.x;
+                let y = targ_pos.y - em_pos.y;
+                let x = targ_pos.x - em_pos.x;
                 // Angle from poition to target along the x-axi&*s. So, anything +y will have a positive angle, -y will have neg angle.
                 let mut targ_angle = y.atan2(x) * (180.0 / 3.14159265358979323846);
                 // Set angle to correct value between 0 and 360
@@ -143,31 +143,31 @@ impl<'a> System<'a> for InteractionDetection {
 
                 // Is the target in the beam-width
                 // If the emission width crosses the x-axis from either side
-                if (emission_origin.direction + emission.width) >= 360.0 || (emission_origin.direction - emission.width) <= 0.0 {
-                    if (360.0 % (targ_angle - emission_origin.direction).abs()) <= (emission.width / 2.0) {
+                if (em_pos.direction + em.width) >= 360.0 || (em_pos.direction - em.width) <= 0.0 {
+                    if (360.0 % (targ_angle - em_pos.direction).abs()) <= (em.width / 2.0) {
                         target_hit = true;
                     }
                 // Else the emission does not cross he x-axis, just check if it's in the arc
-                } else if (targ_angle - emission.width).abs() <= (emission.width / 2.0)  {
+                } else if (targ_angle - em.width).abs() <= (em.width / 2.0)  {
                     target_hit = true;
                 }
 
                 if target_hit {
-                    println!("\nFound Target!\nRadar Direction: {}\nRadar Width: {}\nTarget Location: {}", emission_origin.direction, emission.width, targ_angle);
+                    println!("\nFound Target!\nRadar Direction: {}\nRadar Width: {}\nTarget Location: {}", em_pos.direction, em.width, targ_angle);
                     // Power received: Pr = (Pt * G^2 * lambda^2 * rcs) / ((4pi)^3 * R^4)
-                    let range = ((emission_origin.x - targ_pos.x).powi(2) + (emission_origin.y - targ_pos.y).powi(2)).sqrt();
+                    let range = ((em_pos.x - targ_pos.x).powi(2) + (em_pos.y - targ_pos.y).powi(2)).sqrt();
     
                     // let p_r = (emission.p_t * emission.gain.powi(2) * sig.0 * emission.lambda.powi(2) * 10.0_f32.powi(14)) / (1984.4017 * range.powi(4));
                     // let tot_v = (targ_vel.x.powi(2) + targ_vel.y.powi(2)).sqrt();
                     // let f_r = (1.0 + 2.0 * (tot_v / 300000000.0)) * emission.frequency;
                     // println!("Received Power: {}\nReceived Frequency: {}", p_r, f_r);
-                    let power_density = emission.power / (4.0 * 3.14 * range.powi(2));
-                    let new_abs = Illumniation{power_density: power_density, lambda: emission.lambda, frequency: emission.frequency, angle: targ_angle};
-                    absorption.illuminations.push(new_abs);
+                    let power_density = em.power / (4.0 * 3.14 * range.powi(2));
+                    let new_abs = Illumniation{power_density: power_density, lambda: em.lambda, frequency: em.frequency, angle: targ_angle};
+                    ill.illuminations.push(new_abs);
                 }
             }
             
-            match entities.delete(ent) {
+            match entities.delete(em_entity) {
                 Ok(r) => r,
                 Err(e) => eprintln!("Error!\n {}", e),
             }
@@ -213,13 +213,57 @@ impl<'a> System<'a> for ReflectionSystem {
     }
 }
 
+
+// Radar Sensor reads from environment
+struct AntennaReceiverSystem;
+impl<'a> System<'a> for AntennaReceiverSystem {
+    type SystemData = (
+        ReadStorage<'a, Position>,
+        ReadStorage<'a, Emission>,
+        ReadStorage<'a, Antenna>,
+        Entities<'a>,
+    );
+
+    fn run(&mut self, (positions, emissions, antennas, entities) : Self::SystemData) {
+        for (antenna, antenna_pos) in (&antennas, &positions).join() {
+            for(em, em_pos) in (&emissions, &positions).join() {
+
+                let y = antenna_pos.y - em_pos.y;
+                let x = antenna_pos.x - em_pos.x;
+                // Angle from poition to target along the x-axi&*s. So, anything +y will have a positive angle, -y will have neg angle.
+                let mut targ_angle = y.atan2(x) * (180.0 / 3.14159265358979323846);
+                // Set angle to correct value between 0 and 360
+                if targ_angle < 0.0 { targ_angle = 360.0 + targ_angle;}
+                // println!("target_angle: {}", targ_angle);
+                let mut target_hit = false;
+
+                // Is the target in the beam-width
+                // If the emission width crosses the x-axis from either side
+                if (em_pos.direction + em.width) >= 360.0 || (em_pos.direction - em.width) <= 0.0 {
+                    if (360.0 % (targ_angle - em_pos.direction).abs()) <= (em.width / 2.0) {
+                        target_hit = true;
+                    }
+                // Else the emission does not cross the x-axis, just check if it's in the arc
+                } else if (targ_angle - em.width).abs() <= (em.width / 2.0)  {
+                    target_hit = true;
+                }
+
+                if(target_hit) {
+                    println!("Radar detected emission");
+                }
+            }
+        }
+
+    }
+}
+
 // Changes the position of each entity with position and velocity
 struct Movement;
 impl<'a> System<'a> for Movement {
 
     type SystemData = (
         WriteStorage<'a, Position>,
-        WriteStorage<'a, Sensor>,
+        WriteStorage<'a, Antenna>,
     );
 
     fn run(&mut self, (mut position, mut sensor): Self::SystemData) {
@@ -247,6 +291,7 @@ fn main() {
     .with(TransmitSignal, "transmit_signal", &[])
     .with(InteractionDetection, "radar_sensing", &["transmit_signal"])
     .with(ReflectionSystem, "reflection_creation", &["radar_sensing"])
+    .with(AntennaReceiverSystem, "antenna_receiver", &["reflection_creation"])
     .with(Movement, "movement", &[]).build();
     dispatcher.setup(&mut world);
 
@@ -263,7 +308,7 @@ fn main() {
 
     // An entity may or may not contain some component
     let _radar = world.create_entity().with(Position{x: 0.0, y: 0.0, z: 1.0, direction: 0.0})
-    .with(Sensor{
+    .with(Antenna{
         frequency: frequency, 
         gain: 10.0_f32.powf(gain / 10.0), 
         p_t: (p_t * 1000.0), 
