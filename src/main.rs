@@ -180,9 +180,10 @@ impl<'a> System<'a> for DopplerShiftSystem {
 
     fn run(&mut self, (velocities, mut target_ills) : Self::SystemData) {
         for (vel, targ) in (&velocities, &mut target_ills).join() {
-            for &mut ill in targ.illuminations.iter() {
+            for ill in targ.illuminations.iter_mut() {
                 let tot_vel = (vel.x.powi(2) + vel.y.powi(2) + vel.z.powi(2)).sqrt();
                 let f_r = (1.0 + (2.0 * (tot_vel / 300000000.0))) * ill.frequency;
+                println!("\nFrequency Change! From {} to {}", ill.frequency, f_r);
                 ill.frequency = f_r;
             }
         }
@@ -330,7 +331,8 @@ fn main() {
     phase1.setup(&mut world);
 
     let mut phase2 = DispatcherBuilder::new()
-    .with(ReflectionSystem, "reflection_creation", &[])
+    .with(DopplerShiftSystem, "doppler_shift", &[])
+    .with(ReflectionSystem, "reflection_creation", &["doppler_shift"])
     .with(AntennaReceiverSystem, "antenna_receiver", &["reflection_creation"])
     .with(Movement, "movement", &[]).build();
 
@@ -362,7 +364,7 @@ fn main() {
     let _target1 = world.create_entity()
     .with(Position{x: targ_x, y: targ_y, z: targ_z, direction: 0.0})
     .with(RCS{0: rcs})
-    // .with(Velocity{x: 0.0, y: 0.0, z: 0.0})
+    .with(Velocity{x: 0.0, y: 0.0, z: 0.0})
     .with(TargetIllumniation{illuminations: Vec::new(),})
     .build();
 
