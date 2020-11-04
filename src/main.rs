@@ -18,8 +18,13 @@ impl Component for Position {
 }
 
 #[derive(Debug)]
-struct RCS(f32);
-impl Component for RCS {
+struct EMWave {
+    power: f32,
+    lambda: f32,
+    frequency: f32,
+    width: f32,     // Degrees
+}
+impl Component for EMWave {
     type Storage = VecStorage<Self>;
 }
 
@@ -38,25 +43,59 @@ impl Component for Antenna {
     type Storage = VecStorage<Self>;
 }
 
-// m/s
-// #[derive(Debug)]
-// struct Velocity {
-//     x: f32,
-//     y: f32,
-//     z: f32,
-// }
-// impl Component for Velocity {
-//     type Storage = VecStorage<Self>;
-// }
 
-#[derive(Debug)]
-struct Emission {
-    power: f32,
-    lambda: f32,
-    frequency: f32,
-    width: f32,     // Degrees
+struct TransmitSignal;
+impl<'a> System<'a> for TransmitSignal {
+    type SystemData = (
+        ReadStorage<'a, Antenna>,
+        WriteStorage<'a, EMWave>,
+        WriteStorage<'a, Position>,
+        Entities<'a>,
+    );
+
+    fn run(&mut self, (sensors, mut em_waves, mut positions, entities): Self::SystemData) {
+        // Must Read from each radar system and save values, then create the new emission afterwards
+        // because we cannot iterate over positions and write to them at the same time.
+        let mut new_positions: Vec<Position> = Vec::new();
+        let mut new_emissions: Vec<EMWave> = Vec::new();
+        for (sen, pos) in (&sensors, &mut positions).join() {
+            // println!("\nRadar Direction: {}", pos.direction);
+
+            let new_pos = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
+            let new_wave = EMWave{power: (sen.p_t*sen.gain), lambda: sen.lambda, frequency: sen.frequency, width: sen.azimuth_beam};
+            // println!("Emission Direction: {}", position.direction);
+            new_positions.push(new_pos);
+            new_emissions.push(new_wave);
+        }
+
+        while new_positions.len() != 0 {
+            let new_entity = entities.create();
+
+            let new_pos = new_positions.pop().unwrap();
+            println!("Creating Emission: ({},{})", new_pos.x, new_pos.y);
+            let new_em = new_emissions.pop().unwrap();
+
+            positions.insert(new_entity, new_pos);
+            em_waves.insert(new_entity, new_em);
+
+            // match positions.insert(new_entity, new_pos) {
+            //     Ok(r) => r,
+            //     Err(e) => eprintln!("{}", e),
+            // }
+            // match em_waves.insert(new_entity, new_em) {
+            //     Ok(r) => r,
+            //     Err(e) => return Err(e),
+            // }
+        }
+
+    }
 }
-impl Component for Emission {
+
+struct TargetIllumniation {
+    illuminations: Vec<Illumniation>,
+}
+
+impl Component for TargetIllumniation {
     type Storage = VecStorage<Self>;
 }
 
@@ -68,55 +107,12 @@ struct Illumniation {
     angle: f32,
 }
 
-struct TargetIllumniation {
-    illuminations: Vec<Illumniation>,
-}
-
-impl Component for TargetIllumniation {
-    type Storage = VecStorage<Self>;
-}
-
-
-struct TransmitSignal;
-impl<'a> System<'a> for TransmitSignal {
-    type SystemData = (
-        ReadStorage<'a, Antenna>,
-        WriteStorage<'a, Emission>,
-        WriteStorage<'a, Position>,
-        Entities<'a>,
-    );
-
-    fn run(&mut self, (sensors, mut emissions, mut positions, entities): Self::SystemData) {
-        // Must Read from each radar system and save values, then create the new emission afterwards
-        // because we cannot iterate over positions and write to them at the same time.
-        let mut new_positions: Vec<Position> = Vec::new();
-        let mut new_emissions: Vec<Emission> = Vec::new();
-        for (sen, pos) in (&sensors, &mut positions).join() {
-            // println!("\nRadar Direction: {}", pos.direction);
-
-            let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
-            let emission = Emission{power: (sen.p_t*sen.gain), lambda: sen.lambda, frequency: sen.frequency, width: sen.azimuth_beam};
-            // println!("Emission Direction: {}", position.direction);
-            new_positions.push(position);
-            new_emissions.push(emission);
-        }
-
-        while new_positions.len() != 0 {
-            let new_entity = entities.create();
-            // println!("Emission Direction: {}", position.direction);
-            positions.insert(new_entity, new_positions.remove(0));
-            emissions.insert(new_entity, new_emissions.remove(0));
-        }
-
-    }
-}
-
 // Detects Interactions
 struct InteractionDetection;
 impl<'a> System<'a> for InteractionDetection {
     type SystemData = (
         ReadStorage<'a, Position>,
-        ReadStorage<'a, Emission>,
+        ReadStorage<'a, EMWave>,
         WriteStorage<'a, TargetIllumniation>,
         Entities<'a>,
     );
@@ -125,16 +121,16 @@ impl<'a> System<'a> for InteractionDetection {
     fn run(&mut self, (positions, emissions, mut illumination, entities): Self::SystemData) {
         // let threshold_power = 0.0;
 
-        // Loops through entities with only a sensor and posiiton
-        // println!("\n");
+        // Loop through all of the emissions. em_entity is just an identifier
         for (em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
             // println!("Emission Direction: {}", emission_origin.direction);
-            // Loops through entities with only a position and signiturepul
+
+            // Loops through entities with only a position and illumination. Should just be our 'targets'
             for(targ_pos, ill) in (&positions, &mut illumination).join() {
 
                 let y = targ_pos.y - em_pos.y;
                 let x = targ_pos.x - em_pos.x;
-                // Angle from poition to target along the x-axi&*s. So, anything +y will have a positive angle, -y will have neg angle.
+                // Angle from poition to target along the x-axis. So, anything +y will have a positive angle, -y will have neg angle.
                 let mut targ_angle = y.atan2(x) * (180.0 / 3.14159265358979323846);
                 // Set angle to correct value between 0 and 360
                 if targ_angle < 0.0 { targ_angle = 360.0 + targ_angle;}
@@ -153,7 +149,7 @@ impl<'a> System<'a> for InteractionDetection {
                 }
 
                 if target_hit {
-                    println!("\nFound Target!\nRadar Direction: {}\nRadar Width: {}\nTarget Location: {}", em_pos.direction, em.width, targ_angle);
+                    println!("Target Location: {}", targ_angle);
                     // Power received: Pr = (Pt * G^2 * lambda^2 * rcs) / ((4pi)^3 * R^4)
                     let range = ((em_pos.x - targ_pos.x).powi(2) + (em_pos.y - targ_pos.y).powi(2)).sqrt();
     
@@ -166,7 +162,7 @@ impl<'a> System<'a> for InteractionDetection {
                     ill.illuminations.push(new_abs);
                 }
             }
-            
+            println!("Deleting Target at ({},{})", em_pos.x, em_pos.y);
             match entities.delete(em_entity) {
                 Ok(r) => r,
                 Err(e) => eprintln!("Error!\n {}", e),
@@ -175,12 +171,37 @@ impl<'a> System<'a> for InteractionDetection {
     }
 }
 
+struct DopplerShiftSystem;
+impl<'a> System<'a> for DopplerShiftSystem {
+    type SystemData = (
+        ReadStorage<'a, Velocity>,
+        WriteStorage<'a, TargetIllumniation>,
+    );
+
+    fn run(&mut self, (velocities, mut target_ills) : Self::SystemData) {
+        for (vel, targ) in (&velocities, &mut target_ills).join() {
+            for ill in targ.illuminations.iter_mut() {
+                let tot_vel = (vel.x.powi(2) + vel.y.powi(2) + vel.z.powi(2)).sqrt();
+                let f_r = (1.0 + (2.0 * (tot_vel / 300000000.0))) * ill.frequency;
+                println!("\nFrequency Change! From {} to {}", ill.frequency, f_r);
+                ill.frequency = f_r;
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct RCS(f32);
+impl Component for RCS {
+    type Storage = VecStorage<Self>;
+}
+
 // Creates an emission from the absorption information
 struct ReflectionSystem;
 impl<'a> System<'a> for ReflectionSystem {
     type SystemData = (
         WriteStorage<'a, TargetIllumniation>,
-        WriteStorage<'a, Emission>,
+        WriteStorage<'a, EMWave>,
         WriteStorage<'a, Position>,
         ReadStorage <'a, RCS>,
         Entities<'a>,
@@ -189,14 +210,14 @@ impl<'a> System<'a> for ReflectionSystem {
     fn run(&mut self, (mut target_illumination, mut emission, mut position, rcs, entities) : Self::SystemData) {
         
         let mut new_positions: Vec<Position> = Vec::new();
-        let mut new_emissions: Vec<Emission> = Vec::new();
+        let mut new_emissions: Vec<EMWave> = Vec::new();
         // Iterate through each target
         for (target, pos, target_rcs) in (&mut target_illumination, &position, &rcs).join() {
             for ill in target.illuminations.iter() {
-                println!("New Absorption Angle: {}", ill.angle);
+                println!("New Target Illumanted at angle: {}", ill.angle);
                 let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
                 let p_r = ill.power_density * target_rcs.0;
-                let emission = Emission{power: p_r, lambda: ill.lambda, frequency: ill.frequency, width: 0.0};
+                let emission = EMWave{power: p_r, lambda: ill.lambda, frequency: ill.frequency, width: 20.0};
                 // println!("Emission Direction: {}", position.direction);
                 new_positions.push(position);
                 new_emissions.push(emission);
@@ -219,14 +240,15 @@ struct AntennaReceiverSystem;
 impl<'a> System<'a> for AntennaReceiverSystem {
     type SystemData = (
         ReadStorage<'a, Position>,
-        ReadStorage<'a, Emission>,
+        ReadStorage<'a, EMWave>,
         ReadStorage<'a, Antenna>,
         Entities<'a>,
     );
 
     fn run(&mut self, (positions, emissions, antennas, entities) : Self::SystemData) {
         for (antenna, antenna_pos) in (&antennas, &positions).join() {
-            for(em, em_pos) in (&emissions, &positions).join() {
+            for(em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
+                println!("Emission Pos: ({}, {})", em_pos.x, em_pos.y);
 
                 let y = antenna_pos.y - em_pos.y;
                 let x = antenna_pos.x - em_pos.x;
@@ -248,13 +270,29 @@ impl<'a> System<'a> for AntennaReceiverSystem {
                     target_hit = true;
                 }
 
-                if(target_hit) {
-                    println!("Radar detected emission");
+                if target_hit {
+                    println!("Radar detected emission from angle: {}", targ_angle);
+                }
+            
+                match entities.delete(em_entity) {
+                    Ok(r) => r,
+                    Err(e) => eprintln!("Error!\n {}", e),
                 }
             }
         }
 
     }
+}
+
+// m/s
+#[derive(Debug)]
+struct Velocity {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+impl Component for Velocity {
+    type Storage = VecStorage<Self>;
 }
 
 // Changes the position of each entity with position and velocity
@@ -287,13 +325,18 @@ impl<'a> System<'a> for Movement {
 fn main() {
 
     let mut world = World::new();
-    let mut dispatcher = DispatcherBuilder::new()
+    let mut phase1 = DispatcherBuilder::new()
     .with(TransmitSignal, "transmit_signal", &[])
-    .with(InteractionDetection, "radar_sensing", &["transmit_signal"])
-    .with(ReflectionSystem, "reflection_creation", &["radar_sensing"])
+    .with(InteractionDetection, "radar_sensing", &["transmit_signal"]).build();
+    phase1.setup(&mut world);
+
+    let mut phase2 = DispatcherBuilder::new()
+    .with(DopplerShiftSystem, "doppler_shift", &[])
+    .with(ReflectionSystem, "reflection_creation", &["doppler_shift"])
     .with(AntennaReceiverSystem, "antenna_receiver", &["reflection_creation"])
     .with(Movement, "movement", &[]).build();
-    dispatcher.setup(&mut world);
+
+    phase2.setup(&mut world);
 
     // INPUTS FOR RADAR SENSOR
     let p_t: f32 = 100.0;           // kW    
@@ -301,7 +344,7 @@ fn main() {
     let frequency = 9400000000.0;   // Hz
 
     // TARGET INFO
-    // let rcs = 1.0;                 // m^2
+    let rcs = 1.0;                 // m^2
     let targ_x = 50000.0;          // m from sensor
     let targ_y = -100.0;
     let targ_z = 0.0;
@@ -320,8 +363,8 @@ fn main() {
 
     let _target1 = world.create_entity()
     .with(Position{x: targ_x, y: targ_y, z: targ_z, direction: 0.0})
-    // .with(Signature{0: rcs})
-    // .with(Velocity{x: 0.0, y: 0.0, z: 0.0})
+    .with(RCS{0: rcs})
+    .with(Velocity{x: 0.0, y: 0.0, z: 0.0})
     .with(TargetIllumniation{illuminations: Vec::new(),})
     .build();
 
@@ -331,7 +374,10 @@ fn main() {
     // let runtime = time::Duration::from_micros(16)
     loop {
         let start = time::Instant::now();
-        dispatcher.dispatch(&world);
+        // TransmitSignal.run_now(&world);
+        phase1.dispatch(&world);
+        world.maintain();
+        phase2.dispatch(&world);
         world.maintain();
         // Create frame_rate loop
         let sleep_time = runtime.checked_sub(time::Instant::now().duration_since(start));
