@@ -2,7 +2,7 @@
 
 use specs::prelude::*;
 use specs::{Component, Entities};
-use std::{thread, time};
+use std::{thread, time, fs};
 use specs::Join;
 
 
@@ -335,6 +335,12 @@ fn main() {
         world.maintain();
         // Create frame_rate loop
         let sleep_time = runtime.checked_sub(time::Instant::now().duration_since(start));
+
+        let contents = fs::read_to_string("reflection_geometry.txt")
+        .expect("Something went wrong reading the file");
+
+        println!("{}", contents);
+        
         if sleep_time != None {
             thread::sleep(sleep_time.unwrap());
         }
