@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 specs = "0.16.1"
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
