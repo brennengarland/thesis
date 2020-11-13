@@ -5,6 +5,7 @@ use specs::{Component, Entities};
 use std::{thread, time, fs};
 use specs::Join;
 use serde_json::{Value, Map};
+use serde::{Deserialize};
 
 
 #[derive(Debug)]
@@ -84,6 +85,7 @@ struct Illumniation {
     lambda: f32,
     frequency: f32,
     angle: f32,
+    rcs: f32,
 }
 
 // Detects Interactions
@@ -93,11 +95,12 @@ impl<'a> System<'a> for InteractionDetection {
         ReadStorage<'a, Position>,
         ReadStorage<'a, EMWave>,
         WriteStorage<'a, TargetIllumniation>,
+        ReadStorage<'a, RCS>,
         Entities<'a>,
     );
 
 
-    fn run(&mut self, (positions, emissions, mut illumination, entities): Self::SystemData) {
+    fn run(&mut self, (positions, emissions, mut illumination, rcs, entities): Self::SystemData) {
         // let threshold_power = 0.0;
 
         // Loop through all of the emissions. em_entity is just an identifier
@@ -105,7 +108,7 @@ impl<'a> System<'a> for InteractionDetection {
             // println!("Emission Direction: {}", emission_origin.direction);
 
             // Loops through entities with only a position and illumination. Should just be our 'targets'
-            for(targ_pos, ill) in (&positions, &mut illumination).join() {
+            for(targ_rcs, targ_pos, ill) in (&rcs, &positions, &mut illumination).join() {
 
                 let y = targ_pos.y - em_pos.y;
                 let x = targ_pos.x - em_pos.x;
@@ -137,7 +140,7 @@ impl<'a> System<'a> for InteractionDetection {
                     // let f_r = (1.0 + 2.0 * (tot_v / 300000000.0)) * emission.frequency;
                     // println!("Received Power: {}\nReceived Frequency: {}", p_r, f_r);
                     let power_density = em.power / (4.0 * 3.14 * range.powi(2));
-                    let new_abs = Illumniation{power_density: power_density, lambda: em.wavelength, frequency: em.frequency, angle: targ_angle};
+                    let new_abs = Illumniation{power_density: power_density, lambda: em.wavelength, frequency: em.frequency, angle: targ_angle, rcs: targ_rcs.avg_rcs};
                     ill.illuminations.push(new_abs);
                 }
             }
@@ -168,10 +171,47 @@ impl<'a> System<'a> for DopplerShiftSystem {
     }
 }
 
-#[derive(Debug)]
-struct RCS(f32);
+#[derive(Debug, Deserialize)]
+struct RCS {
+    angles: Vec<f32>,
+    values: Vec<f32>,
+    avg_rcs: f32,
+}
+
 impl Component for RCS {
     type Storage = VecStorage<Self>;
+}
+
+struct RCSSystem;
+impl<'a> System<'a> for RCSSystem {
+    type SystemData = (
+        ReadStorage<'a, RCS>,
+        WriteStorage<'a, TargetIllumniation>,
+    );
+
+    fn run(&mut self, (cross_sections, mut illuminations) : Self::SystemData)  {
+        for (rcs, targ) in (&cross_sections, &mut illuminations).join() {
+            for ill in targ.illuminations.iter_mut() {
+                let mut refl_pwr: f32 = -1.0;
+                if rcs.angles.contains(&ill.angle) {
+                    refl_pwr = rcs.values[rcs.angles.iter().position(|&r| r == ill.angle).unwrap()];
+                } else {
+                    for i in 0 .. rcs.angles.len()-1 {
+                        if ill.angle < rcs.angles[i] {
+                            refl_pwr = rcs.values[i];
+                        }
+                    }
+    
+                    if refl_pwr == -1.0 {
+                        refl_pwr = rcs.values[rcs.values.len()-1];
+                    }
+                }
+                println!("RCS for angle {} is: {}", ill.angle, refl_pwr);
+                ill.rcs = refl_pwr;
+
+            }
+        }
+    }
 }
 
 // Creates an emission from the absorption information
@@ -194,7 +234,7 @@ impl<'a> System<'a> for ReflectionSystem {
             for ill in target.illuminations.iter() {
                 println!("New Target Illumanted at angle: {}", ill.angle);
                 let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
-                let p_r = ill.power_density * target_rcs.0;
+                let p_r = ill.power_density * ill.rcs;
                 let emission = EMWave{power: p_r, wavelength: ill.lambda, frequency: ill.frequency, azimuth_width: 20.0, elevation_width: 20.0};
                 // println!("Emission Direction: {}", position.direction);
                 new_positions.push(position);
@@ -313,7 +353,8 @@ fn main() {
 
     let mut reflection = DispatcherBuilder::new()
     .with(DopplerShiftSystem, "doppler_shift", &[])
-    .with(ReflectionSystem, "reflection_creation", &["doppler_shift"]).build();
+    .with(RCSSystem, "rcs_system", &[])
+    .with(ReflectionSystem, "reflection_creation", &["doppler_shift", "rcs_system"]).build();
     reflection.setup(&mut world);
 
     let mut reception = DispatcherBuilder::new()
@@ -332,6 +373,12 @@ fn main() {
     let targ_y = -100.0;
     let targ_z = 100.0;
 
+    // RCS 
+    let data = fs::read_to_string("src/data.json").expect("Unable to read file");
+    // Parse the string of data into serde_json::Value.
+    let targ_rcs: RCS = serde_json::from_str(&data).expect("error parsing");
+    println!("Avg RCS: {}", targ_rcs.avg_rcs);
+
     // An entity may or may not contain some component
     let _radar = world.create_entity().with(Position{x: 0.0, y: 0.0, z: 1.0, direction: 0.0})
     .with(Antenna{
@@ -345,7 +392,7 @@ fn main() {
 
     let _target1 = world.create_entity()
     .with(Position{x: targ_x, y: targ_y, z: targ_z, direction: 0.0})
-    .with(RCS{0: rcs})
+    .with(targ_rcs)
     .with(Velocity{x: 0.0, y: 0.0, z: 0.0})
     .with(TargetIllumniation{illuminations: Vec::new(),})
     .build();
@@ -367,11 +414,6 @@ fn main() {
         world.maintain();
         // Create frame_rate loop
         let sleep_time = runtime.checked_sub(time::Instant::now().duration_since(start));
-
-        let contents = fs::read_to_string("reflection_geometry.txt")
-        .expect("Something went wrong reading the file");
-
-        println!("{}", contents);
         
         if sleep_time != None {
             thread::sleep(sleep_time.unwrap());
