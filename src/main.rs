@@ -55,15 +55,13 @@ impl<'a> System<'a> for TransmitSignal {
         Read<'a, LazyUpdate>
     );
 
-    fn run(&mut self, (sensors, mut em_waves, mut positions, entities, updater): Self::SystemData) {
+    fn run(&mut self, (antennas, mut em_waves, mut positions, entities, updater): Self::SystemData) {
         // Must Read from each radar system and save values, then create the new emission afterwards
         // because we cannot iterate over positions and write to them at the same time.
-        for (sen, pos) in (&sensors, &mut positions).join() {
-            // println!("\nRadar Direction: {}", pos.direction);
+        for (ant, pos) in (&antennas, &mut positions).join() {
 
             let new_pos = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
-            let new_wave = EMWave{power: (sen.power*sen.gain), wavelength: sen.wavelength, frequency: sen.frequency, azimuth_width: sen.azimuth_beam_width, elevation_width: sen.elevation_beam_width};
-            
+            let new_wave = EMWave{power: (ant.power*ant.gain), wavelength: ant.wavelength, frequency: ant.frequency, azimuth_width: ant.azimuth_beam_width, elevation_width: ant.elevation_beam_width};
             let new_entity = entities.create();
             updater.insert(new_entity, new_pos);
             updater.insert(new_entity, new_wave);
@@ -101,15 +99,10 @@ impl<'a> System<'a> for InteractionDetection {
 
 
     fn run(&mut self, (positions, emissions, mut illumination, rcs, entities): Self::SystemData) {
-        // let threshold_power = 0.0;
-
         // Loop through all of the emissions. em_entity is just an identifier
         for (em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
-            // println!("Emission Direction: {}", emission_origin.direction);
-
-            // Loops through entities with only a position and illumination. Should just be our 'targets'
+            // Loops through entities with only a position, illumination, and RCS. Should just be our 'targets'
             for(targ_rcs, targ_pos, ill) in (&rcs, &positions, &mut illumination).join() {
-
                 let y = targ_pos.y - em_pos.y;
                 let x = targ_pos.x - em_pos.x;
                 // Angle from poition to target along the x-axis. So, anything +y will have a positive angle, -y will have neg angle.
@@ -121,30 +114,31 @@ impl<'a> System<'a> for InteractionDetection {
 
                 // Is the target in the beam-width
                 // If the emission width crosses the x-axis from either side
-                if (em_pos.direction + em.azimuth_width) >= 360.0 || (em_pos.direction - em.azimuth_width) <= 0.0 {
-                    if (360.0 % (targ_angle - em_pos.direction).abs()) <= (em.azimuth_width / 2.0) {
-                        target_hit = true;
+                if (em_pos.direction + (em.azimuth_width / 2.0)) >= 360.0 || (em_pos.direction - (em.azimuth_width / 2.0)) <= 0.0 {
+                    if targ_angle <= em.azimuth_width / 2.0 {
+                        targ_angle = targ_angle + 360.0;
                     }
-                // Else the emission does not cross he x-axis, just check if it's in the arc
-                } else if (targ_angle - em.azimuth_width).abs() <= (em.azimuth_width / 2.0)  {
+                    if em_pos.direction >= 0.0 {
+                        if(targ_angle - em_pos.direction - 360.0).abs() <= (em.azimuth_width / 2.0) {
+                            target_hit = true;
+                        }
+                    }
+                } 
+                if (targ_angle - em_pos.direction).abs() <= (em.azimuth_width / 2.0)  {
                     target_hit = true;
                 }
 
                 if target_hit {
-                    println!("Target Location: {}", targ_angle);
                     // Power received: Pr = (Pt * G^2 * lambda^2 * rcs) / ((4pi)^3 * R^4)
+                    println!("!!!!Target Hit!!!!");
+                    println!("Target Angle: {} at {}", targ_angle, targ_pos.x);
+                    println!("Emission Direction: {}\tWidth: {}", em_pos.direction, em.azimuth_width);
                     let range = ((em_pos.x - targ_pos.x).powi(2) + (em_pos.y - targ_pos.y).powi(2)).sqrt();
-    
-                    // let p_r = (emission.p_t * emission.gain.powi(2) * sig.0 * emission.lambda.powi(2) * 10.0_f32.powi(14)) / (1984.4017 * range.powi(4));
-                    // let tot_v = (targ_vel.x.powi(2) + targ_vel.y.powi(2)).sqrt();
-                    // let f_r = (1.0 + 2.0 * (tot_v / 300000000.0)) * emission.frequency;
-                    // println!("Received Power: {}\nReceived Frequency: {}", p_r, f_r);
                     let power_density = em.power / (4.0 * 3.14 * range.powi(2));
                     let new_abs = Illumniation{power_density: power_density, lambda: em.wavelength, frequency: em.frequency, angle: targ_angle, rcs: targ_rcs.avg_rcs};
                     ill.illuminations.push(new_abs);
                 }
             }
-            println!("Deleting Target at ({},{})", em_pos.x, em_pos.y);
             match entities.delete(em_entity) {
                 Ok(r) => r,
                 Err(e) => eprintln!("Error!\n {}", e),
@@ -206,7 +200,6 @@ impl<'a> System<'a> for RCSSystem {
                         refl_pwr = rcs.values[rcs.values.len()-1];
                     }
                 }
-                println!("RCS for angle {} is: {}", ill.angle, refl_pwr);
                 ill.rcs = refl_pwr;
 
             }
@@ -221,19 +214,17 @@ impl<'a> System<'a> for ReflectionSystem {
         WriteStorage<'a, TargetIllumniation>,
         WriteStorage<'a, EMWave>,
         WriteStorage<'a, Position>,
-        ReadStorage <'a, RCS>,
         Entities<'a>,
     );
 
-    fn run(&mut self, (mut target_illumination, mut emission, mut position, rcs, entities) : Self::SystemData) {
+    fn run(&mut self, (mut target_illumination, mut emission, mut position, entities) : Self::SystemData) {
         
         let mut new_positions: Vec<Position> = Vec::new();
         let mut new_emissions: Vec<EMWave> = Vec::new();
         // Iterate through each target
-        for (target, pos, target_rcs) in (&mut target_illumination, &position, &rcs).join() {
+        for (target, pos) in (&mut target_illumination, &position).join() {
             for ill in target.illuminations.iter() {
-                println!("New Target Illumanted at angle: {}", ill.angle);
-                let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
+                let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: (180.0 + ill.angle) % 360.0};
                 let p_r = ill.power_density * ill.rcs;
                 let emission = EMWave{power: p_r, wavelength: ill.lambda, frequency: ill.frequency, azimuth_width: 20.0, elevation_width: 20.0};
                 // println!("Emission Direction: {}", position.direction);
@@ -266,30 +257,32 @@ impl<'a> System<'a> for AntennaReceiverSystem {
     fn run(&mut self, (positions, emissions, antennas, entities) : Self::SystemData) {
         for (antenna, antenna_pos) in (&antennas, &positions).join() {
             for(em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
-                println!("Emission Pos: ({}, {})", em_pos.x, em_pos.y);
-
                 let y = antenna_pos.y - em_pos.y;
                 let x = antenna_pos.x - em_pos.x;
                 // Angle from poition to target along the x-axi&*s. So, anything +y will have a positive angle, -y will have neg angle.
                 let mut targ_angle = y.atan2(x) * (180.0 / 3.14159265358979323846);
+
                 // Set angle to correct value between 0 and 360
                 if targ_angle < 0.0 { targ_angle = 360.0 + targ_angle;}
-                // println!("target_angle: {}", targ_angle);
+                // println!("target_angle: {}", targ_ang,le);
                 let mut target_hit = false;
-
-                // Is the target in the beam-width
-                // If the emission width crosses the x-axis from either side
-                if (em_pos.direction + em.azimuth_width) >= 360.0 || (em_pos.direction - em.azimuth_width) <= 0.0 {
-                    if (360.0 % (targ_angle - em_pos.direction).abs()) <= (em.azimuth_width / 2.0) {
-                        target_hit = true;
+                
+                if (em_pos.direction + (em.azimuth_width / 2.0)) >= 360.0 || (em_pos.direction - (em.azimuth_width / 2.0)) <= 0.0 {
+                    if targ_angle <= em.azimuth_width / 2.0 {
+                        targ_angle = targ_angle + 360.0;
                     }
-                // Else the emission does not cross the x-axis, just check if it's in the arc
-                } else if (targ_angle - em.azimuth_width).abs() <= (em.azimuth_width / 2.0)  {
+                    if em_pos.direction >= 0.0 {
+                        if(targ_angle - em_pos.direction - 360.0).abs() <= (em.azimuth_width / 2.0) {
+                            target_hit = true;
+                        }
+                    }
+                } 
+                if (targ_angle - em_pos.direction).abs() <= (em.azimuth_width / 2.0)  {
                     target_hit = true;
                 }
 
                 if target_hit {
-                    println!("Radar detected emission from angle: {}", targ_angle);
+                    println!("Radar detected emission from angle: {}", antenna_pos.direction);
                 }
             
                 match entities.delete(em_entity) {
@@ -320,22 +313,18 @@ impl<'a> System<'a> for Movement {
     type SystemData = (
         WriteStorage<'a, Position>,
         WriteStorage<'a, Antenna>,
+        ReadStorage<'a, Velocity>,
     );
 
-    fn run(&mut self, (mut position, mut sensor): Self::SystemData) {
-        for(position, sensor) in (&mut position, &mut sensor).join() {
+    fn run(&mut self, (mut position, mut sensor, velocity): Self::SystemData) {
+        for(pos, sen) in (&mut position, &mut sensor).join() {
             let max_direction = 360.0;  // degrees
+            pos.direction = (pos.direction + sen.azimuth_beam_width/2.0) % max_direction;
+        }
 
-            // Rotate the beam between 0 and 360
-            // position.direction += sensor.azimuth_beam;
-            // if position.direction > max_direction  || position.direction <= 0.0 {
-            //     sensor.azimuth_beam = sensor.azimuth_beam*-1.0;
-            //     position.direction += sensor.azimuth_beam*2.0;
-            // } 
-            position.direction = (position.direction + sensor.azimuth_beam_width) % max_direction;
-
-            // println!("Radar Direction: {}", position.direction);
-
+        for(pos, vel) in (&mut position, &velocity).join() {
+            pos.x += vel.x;
+            pos.y += vel.y;
         }
     }
 }
@@ -369,31 +358,31 @@ fn main() {
 
     // TARGET INFO
     let rcs = 1.0;                 // m^2
-    let targ_x = 50000.0;          // m from sensor
-    let targ_y = -100.0;
-    let targ_z = 100.0;
+    let targ_x = 100.0;          // m from sensor
+    let targ_y = 50.0;
+    let targ_z = 0.0;
 
     // RCS 
     let data = fs::read_to_string("src/data.json").expect("Unable to read file");
     // Parse the string of data into serde_json::Value.
     let targ_rcs: RCS = serde_json::from_str(&data).expect("error parsing");
-    println!("Avg RCS: {}", targ_rcs.avg_rcs);
+    // println!("Avg RCS: {}", targ_rcs.avg_rcs);
 
     // An entity may or may not contain some component
-    let _radar = world.create_entity().with(Position{x: 0.0, y: 0.0, z: 1.0, direction: 0.0})
+    let _radar = world.create_entity().with(Position{x: 0.0, y: 0.0, z: 1.0, direction: 5.0})
     .with(Antenna{
         frequency: frequency, 
         gain: 10.0_f32.powf(gain / 10.0), 
         power: (p_t * 1000.0), 
         wavelength: ((3.0 * 100000000.0) / frequency),
-        azimuth_beam_width: 20.0,
+        azimuth_beam_width: 10.0,
         elevation_beam_width: 20.0,
         }).build();
 
     let _target1 = world.create_entity()
     .with(Position{x: targ_x, y: targ_y, z: targ_z, direction: 0.0})
     .with(targ_rcs)
-    .with(Velocity{x: 0.0, y: 0.0, z: 0.0})
+    .with(Velocity{x: -10.0, y: 0.0, z: 0.0})
     .with(TargetIllumniation{illuminations: Vec::new(),})
     .build();
 
@@ -413,10 +402,11 @@ fn main() {
         reception.dispatch(&world);
         world.maintain();
         // Create frame_rate loop
-        let sleep_time = runtime.checked_sub(time::Instant::now().duration_since(start));
+        // let sleep_time = runtime.checked_sub(time::Instant::now().duration_since(start));
         
-        if sleep_time != None {
-            thread::sleep(sleep_time.unwrap());
-        }
+        // if sleep_time != None {
+        //     thread::sleep(sleep_time.unwrap());
+        // }
+        thread::sleep(time::Duration::from_millis(500));
     }
 }
