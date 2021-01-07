@@ -2,13 +2,34 @@
 
 use specs::prelude::*;
 use std::{thread, time, fs};
-use specs::Join;
-use serde_json::{Value, Map};
 
+// Import systems
+mod transmit_signal;
+use transmit_signal::*;
 
-mod ecs_sim;
-use ecs_sim::*;
+mod interaction_detection;
+use interaction_detection::*;
 
+mod doppler_shift;
+use doppler_shift::*;
+
+mod rcs;
+use rcs::*;
+
+mod jamming;
+use jamming::*;
+
+mod reflection;
+use reflection::*;
+
+mod antenna_receiver;
+use antenna_receiver::*;
+
+mod movement;
+use movement::*;
+
+mod components;
+use components::*;
 
 fn main() {
 
@@ -47,7 +68,7 @@ fn main() {
     // RCS 
     let data = fs::read_to_string("src/data.json").expect("Unable to read file");
     // Parse the string of data into serde_json::Value.
-    let targ_rcs:(RCS = serde_json::from_str(&data).expect("error parsing");
+    let targ_rcs: RCS = serde_json::from_str(&data).expect("error parsing");
     // println!("Avg RCS: {}", targ_rcs.avg_rcs);
 
     // An entity may or may not contain some component
@@ -65,12 +86,12 @@ fn main() {
     .with(Position{x: targ_x, y: targ_y, z: targ_z, direction: 0.0})
     .with(targ_rcs)
     .with(Velocity{x: -10.0, y: 0.0, z: 0.0})
-    .with(TargetIllumniation{illuminations: Vec::new(),})
+    .with(TargetIllumination{illuminations: Vec::new(),})
     // .with(Velocity{x: -50.0, y: -100.0, z: -10.0})
     .build();
 
 
-    let runtime = time::Duration::from_secs(1);
+    // let runtime = time::Duration::from_secs(1);
     // About 60 frames / sec
     // let runtime = time::Duration::from_micros(16)
     loop {
