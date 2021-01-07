@@ -4,30 +4,10 @@ use specs::prelude::*;
 use std::{thread, time, fs};
 
 // Import systems
-mod transmit_signal;
-use transmit_signal::*;
+mod systems;
+use systems::*;
 
-mod interaction_detection;
-use interaction_detection::*;
-
-mod doppler_shift;
-use doppler_shift::*;
-
-mod rcs;
-use rcs::*;
-
-mod jamming;
-use jamming::*;
-
-mod reflection;
-use reflection::*;
-
-mod antenna_receiver;
-use antenna_receiver::*;
-
-mod movement;
-use movement::*;
-
+// Import Components
 mod components;
 use components::*;
 
