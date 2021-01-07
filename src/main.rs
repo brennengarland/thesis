@@ -8,66 +8,8 @@ use serde_json::{Value, Map};
 use serde::{Deserialize};
 
 
-#[derive(Debug)]
-struct Position {
-    x: f32, // meters
-    y: f32,
-    z: f32,
-    direction: f32,
-}
-impl Component for Position {
-    type Storage = VecStorage<Self>;
-}
-
-#[derive(Debug)]
-struct EMWave {
-    power: f32,
-    wavelength: f32,
-    frequency: f32,
-    azimuth_width: f32,     // Degrees
-    elevation_width: f32
-}
-impl Component for EMWave {
-    type Storage = VecStorage<Self>;
-}
-
-#[derive(Debug)]
-struct Antenna {
-    frequency: f32,         // Hz
-    gain: f32,              // w / w
-    power: f32,               // Watts
-    wavelength: f32,            // wavelength
-    elevation_beam_width: f32,    // degrees, We'll assume elevation is infinitley tall for now
-    azimuth_beam_width: f32,      // degrees
-}
-impl Component for Antenna {
-    type Storage = VecStorage<Self>;
-}
-
-
-struct TransmitSignal;
-impl<'a> System<'a> for TransmitSignal {
-    type SystemData = (
-        ReadStorage<'a, Antenna>,
-        WriteStorage<'a, EMWave>,
-        WriteStorage<'a, Position>,
-        Entities<'a>,
-        Read<'a, LazyUpdate>
-    );
-
-    fn run(&mut self, (antennas, mut em_waves, mut positions, entities, updater): Self::SystemData) {
-        // Must Read from each radar system and save values, then create the new emission afterwards
-        // because we cannot iterate over positions and write to them at the same time.
-        for (ant, pos) in (&antennas, &mut positions).join() {
-
-            let new_pos = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
-            let new_wave = EMWave{power: (ant.power*ant.gain), wavelength: ant.wavelength, frequency: ant.frequency, azimuth_width: ant.azimuth_beam_width, elevation_width: ant.elevation_beam_width};
-            let new_entity = entities.create();
-            updater.insert(new_entity, new_pos);
-            updater.insert(new_entity, new_wave);
-        }
-    }
-}
+mod antenna_receiver;
+mod transmit_signal;
 
 struct TargetIllumniation {
     illuminations: Vec<Illumniation>,
@@ -79,90 +21,11 @@ impl Component for TargetIllumniation {
 
 #[derive(Debug)]
 struct Illumniation {
-    power_density: f32,
+    power: f32,
     lambda: f32,
     frequency: f32,
     angle: f32,
     rcs: f32,
-}
-
-// Detects Interactions
-struct InteractionDetection;
-impl<'a> System<'a> for InteractionDetection {
-    type SystemData = (
-        ReadStorage<'a, Position>,
-        ReadStorage<'a, EMWave>,
-        WriteStorage<'a, TargetIllumniation>,
-        ReadStorage<'a, RCS>,
-        Entities<'a>,
-    );
-
-
-    fn run(&mut self, (positions, emissions, mut illumination, rcs, entities): Self::SystemData) {
-        // Loop through all of the emissions. em_entity is just an identifier
-        for (em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
-            // Loops through entities with only a position, illumination, and RCS. Should just be our 'targets'
-            for(targ_rcs, targ_pos, ill) in (&rcs, &positions, &mut illumination).join() {
-                let y = targ_pos.y - em_pos.y;
-                let x = targ_pos.x - em_pos.x;
-                // Angle from poition to target along the x-axis. So, anything +y will have a positive angle, -y will have neg angle.
-                let mut targ_angle = y.atan2(x) * (180.0 / 3.14159265358979323846);
-                // Set angle to correct value between 0 and 360
-                if targ_angle < 0.0 { targ_angle = 360.0 + targ_angle;}
-                // println!("target_angle: {}", targ_angle);
-                let mut target_hit = false;
-
-                // Is the target in the beam-width
-                // If the emission width crosses the x-axis from either side
-                if (em_pos.direction + (em.azimuth_width / 2.0)) >= 360.0 || (em_pos.direction - (em.azimuth_width / 2.0)) <= 0.0 {
-                    if targ_angle <= em.azimuth_width / 2.0 {
-                        targ_angle = targ_angle + 360.0;
-                    }
-                    if em_pos.direction >= 0.0 {
-                        if(targ_angle - em_pos.direction - 360.0).abs() <= (em.azimuth_width / 2.0) {
-                            target_hit = true;
-                        }
-                    }
-                } 
-                if (targ_angle - em_pos.direction).abs() <= (em.azimuth_width / 2.0)  {
-                    target_hit = true;
-                }
-
-                if target_hit {
-                    // Power received: Pr = (Pt * G^2 * lambda^2 * rcs) / ((4pi)^3 * R^4)
-                    println!("!!!!Target Hit!!!!");
-                    println!("Target Angle: {} at {}", targ_angle, targ_pos.x);
-                    println!("Emission Direction: {}\tWidth: {}", em_pos.direction, em.azimuth_width);
-                    let range = ((em_pos.x - targ_pos.x).powi(2) + (em_pos.y - targ_pos.y).powi(2)).sqrt();
-                    let power_density = em.power / (4.0 * 3.14 * range.powi(2));
-                    let new_abs = Illumniation{power_density: power_density, lambda: em.wavelength, frequency: em.frequency, angle: targ_angle, rcs: targ_rcs.avg_rcs};
-                    ill.illuminations.push(new_abs);
-                }
-            }
-            match entities.delete(em_entity) {
-                Ok(r) => r,
-                Err(e) => eprintln!("Error!\n {}", e),
-            }
-        }
-    }
-}
-
-struct DopplerShiftSystem;
-impl<'a> System<'a> for DopplerShiftSystem {
-    type SystemData = (
-        ReadStorage<'a, Velocity>,
-        WriteStorage<'a, TargetIllumniation>,
-    );
-
-    fn run(&mut self, (velocities, mut target_ills) : Self::SystemData) {
-        for (vel, targ) in (&velocities, &mut target_ills).join() {
-            for ill in targ.illuminations.iter_mut() {
-                let tot_vel = (vel.x.powi(2) + vel.y.powi(2) + vel.z.powi(2)).sqrt();
-                let f_r = (1.0 + (2.0 * (tot_vel / 300000000.0))) * ill.frequency;
-                ill.frequency = f_r;
-            }
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -176,124 +39,8 @@ impl Component for RCS {
     type Storage = VecStorage<Self>;
 }
 
-struct RCSSystem;
-impl<'a> System<'a> for RCSSystem {
-    type SystemData = (
-        ReadStorage<'a, RCS>,
-        WriteStorage<'a, TargetIllumniation>,
-    );
-
-    fn run(&mut self, (cross_sections, mut illuminations) : Self::SystemData)  {
-        for (rcs, targ) in (&cross_sections, &mut illuminations).join() {
-            for ill in targ.illuminations.iter_mut() {
-                let mut refl_pwr: f32 = -1.0;
-                if rcs.angles.contains(&ill.angle) {
-                    refl_pwr = rcs.values[rcs.angles.iter().position(|&r| r == ill.angle).unwrap()];
-                } else {
-                    for i in 0 .. rcs.angles.len()-1 {
-                        if ill.angle < rcs.angles[i] {
-                            refl_pwr = rcs.values[i];
-                        }
-                    }
-    
-                    if refl_pwr == -1.0 {
-                        refl_pwr = rcs.values[rcs.values.len()-1];
-                    }
-                }
-                ill.rcs = refl_pwr;
-
-            }
-        }
-    }
-}
-
-// Creates an emission from the absorption information
-struct ReflectionSystem;
-impl<'a> System<'a> for ReflectionSystem {
-    type SystemData = (
-        WriteStorage<'a, TargetIllumniation>,
-        WriteStorage<'a, EMWave>,
-        WriteStorage<'a, Position>,
-        Entities<'a>,
-    );
-
-    fn run(&mut self, (mut target_illumination, mut emission, mut position, entities) : Self::SystemData) {
-        
-        let mut new_positions: Vec<Position> = Vec::new();
-        let mut new_emissions: Vec<EMWave> = Vec::new();
-        // Iterate through each target
-        for (target, pos) in (&mut target_illumination, &position).join() {
-            for ill in target.illuminations.iter() {
-                let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: (180.0 + ill.angle) % 360.0};
-                let p_r = ill.power_density * ill.rcs;
-                let emission = EMWave{power: p_r, wavelength: ill.lambda, frequency: ill.frequency, azimuth_width: 20.0, elevation_width: 20.0};
-                // println!("Emission Direction: {}", position.direction);
-                new_positions.push(position);
-                new_emissions.push(emission);
-            }
-            target.illuminations.clear();
-        }
-
-        while new_positions.len() != 0 {
-            let new_entity = entities.create();
-            // println!("Emission Direction: {}", position.direction);
-            position.insert(new_entity, new_positions.remove(0));
-            emission.insert(new_entity, new_emissions.remove(0));
-        }
-    }
-}
 
 
-// Radar Sensor reads from environment
-struct AntennaReceiverSystem;
-impl<'a> System<'a> for AntennaReceiverSystem {
-    type SystemData = (
-        ReadStorage<'a, Position>,
-        ReadStorage<'a, EMWave>,
-        ReadStorage<'a, Antenna>,
-        Entities<'a>,
-    );
-
-    fn run(&mut self, (positions, emissions, antennas, entities) : Self::SystemData) {
-        for (antenna, antenna_pos) in (&antennas, &positions).join() {
-            for(em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
-                let y = antenna_pos.y - em_pos.y;
-                let x = antenna_pos.x - em_pos.x;
-                // Angle from poition to target along the x-axi&*s. So, anything +y will have a positive angle, -y will have neg angle.
-                let mut targ_angle = y.atan2(x) * (180.0 / 3.14159265358979323846);
-
-                // Set angle to correct value between 0 and 360
-                if targ_angle < 0.0 { targ_angle = 360.0 + targ_angle;}
-                // println!("target_angle: {}", targ_ang,le);
-                let mut target_hit = false;
-                
-                if (em_pos.direction + (em.azimuth_width / 2.0)) >= 360.0 || (em_pos.direction - (em.azimuth_width / 2.0)) <= 0.0 {
-                    if targ_angle <= em.azimuth_width / 2.0 {
-                        targ_angle = targ_angle + 360.0;
-                    }
-                    if em_pos.direction >= 0.0 {
-                        if(targ_angle - em_pos.direction - 360.0).abs() <= (em.azimuth_width / 2.0) {
-                            target_hit = true;
-                        }
-                    }
-                } 
-                if (targ_angle - em_pos.direction).abs() <= (em.azimuth_width / 2.0)  {
-                    target_hit = true;
-                }
-
-                if target_hit {
-                    println!("Radar detected emission from angle: {}", antenna_pos.direction);
-                }
-            
-                match entities.delete(em_entity) {
-                    Ok(r) => r,
-                    Err(e) => eprintln!("Error!\n {}", e),
-                }
-            }
-        }
-
-    }
-}
 
 // m/s
 #[derive(Debug)]
@@ -306,34 +53,11 @@ impl Component for Velocity {
     type Storage = VecStorage<Self>;
 }
 
-// Changes the position of each entity with position and velocity
-struct Movement;
-impl<'a> System<'a> for Movement {
-
-    type SystemData = (
-        WriteStorage<'a, Position>,
-        WriteStorage<'a, Antenna>,
-        ReadStorage<'a, Velocity>,
-    );
-
-    fn run(&mut self, (mut position, mut sensor, velocity): Self::SystemData) {
-        for(pos, sen) in (&mut position, &mut sensor).join() {
-            let max_direction = 360.0;  // degrees
-            pos.direction = (pos.direction + sen.azimuth_beam_width/2.0) % max_direction;
-        }
-
-        for(pos, vel) in (&mut position, &velocity).join() {
-            pos.x += vel.x;
-            pos.y += vel.y;
-        }
-    }
-}
-
 fn main() {
 
     let mut world = World::new();
     let mut transmission = DispatcherBuilder::new()
-    .with(TransmitSignal, "transmit_signal", &[]).build();
+    .with(transmit_signal::TransmitSignal, "transmit_signal", &[]).build();
     transmission.setup(&mut world);
 
     let mut illumination = DispatcherBuilder::new()
@@ -347,7 +71,7 @@ fn main() {
     reflection.setup(&mut world);
 
     let mut reception = DispatcherBuilder::new()
-    .with(AntennaReceiverSystem, "antenna_receiver", &[])
+    .with(antenna_receiver::AntennaReceiverSystem, "antenna_receiver", &[])
     .with(Movement, "movement", &[]).build();
     reception.setup(&mut world);
 
@@ -384,6 +108,7 @@ fn main() {
     .with(targ_rcs)
     .with(Velocity{x: -10.0, y: 0.0, z: 0.0})
     .with(TargetIllumniation{illuminations: Vec::new(),})
+    // .with(Velocity{x: -50.0, y: -100.0, z: -10.0})
     .build();
 
 
