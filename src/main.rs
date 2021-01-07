@@ -1,63 +1,20 @@
 // extern crate specs;
 
 use specs::prelude::*;
-use specs::{Component, Entities};
 use std::{thread, time, fs};
 use specs::Join;
 use serde_json::{Value, Map};
-use serde::{Deserialize};
 
 
-mod antenna_receiver;
-mod transmit_signal;
+mod ecs_sim;
+use ecs_sim::*;
 
-struct TargetIllumniation {
-    illuminations: Vec<Illumniation>,
-}
-
-impl Component for TargetIllumniation {
-    type Storage = VecStorage<Self>;
-}
-
-#[derive(Debug)]
-struct Illumniation {
-    power: f32,
-    lambda: f32,
-    frequency: f32,
-    angle: f32,
-    rcs: f32,
-}
-
-#[derive(Debug, Deserialize)]
-struct RCS {
-    angles: Vec<f32>,
-    values: Vec<f32>,
-    avg_rcs: f32,
-}
-
-impl Component for RCS {
-    type Storage = VecStorage<Self>;
-}
-
-
-
-
-// m/s
-#[derive(Debug)]
-struct Velocity {
-    x: f32,
-    y: f32,
-    z: f32,
-}
-impl Component for Velocity {
-    type Storage = VecStorage<Self>;
-}
 
 fn main() {
 
     let mut world = World::new();
     let mut transmission = DispatcherBuilder::new()
-    .with(transmit_signal::TransmitSignal, "transmit_signal", &[]).build();
+    .with(TransmitSignal, "transmit_signal", &[]).build();
     transmission.setup(&mut world);
 
     let mut illumination = DispatcherBuilder::new()
@@ -71,7 +28,7 @@ fn main() {
     reflection.setup(&mut world);
 
     let mut reception = DispatcherBuilder::new()
-    .with(antenna_receiver::AntennaReceiverSystem, "antenna_receiver", &[])
+    .with(AntennaReceiverSystem, "antenna_receiver", &[])
     .with(Movement, "movement", &[]).build();
     reception.setup(&mut world);
 
@@ -89,7 +46,7 @@ fn main() {
     // RCS 
     let data = fs::read_to_string("src/data.json").expect("Unable to read file");
     // Parse the string of data into serde_json::Value.
-    let targ_rcs: RCS = serde_json::from_str(&data).expect("error parsing");
+    let targ_rcs:(RCS = serde_json::from_str(&data).expect("error parsing");
     // println!("Avg RCS: {}", targ_rcs.avg_rcs);
 
     // An entity may or may not contain some component
