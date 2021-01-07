@@ -24,7 +24,8 @@ fn main() {
     let mut reflection = DispatcherBuilder::new()
     .with(DopplerShiftSystem, "doppler_shift", &[])
     .with(RCSSystem, "rcs_system", &[])
-    .with(ReflectionSystem, "reflection_creation", &["doppler_shift", "rcs_system"]).build();
+    .with(JammingSystem, "jamming_system", &[])
+    .with(ReflectionSystem, "reflection_creation", &["jamming_system","doppler_shift", "rcs_system"]).build();
     reflection.setup(&mut world);
 
     let mut reception = DispatcherBuilder::new()
