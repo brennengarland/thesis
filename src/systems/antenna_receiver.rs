@@ -16,6 +16,7 @@ impl<'a> System<'a> for AntennaReceiverSystem {
             for(em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
                 let y = antenna_pos.y - em_pos.y;
                 let x = antenna_pos.x - em_pos.x;
+                let range = (y.powi(2) + x.powi(2)).sqrt();
                 // Angle from poition to target along the x-axi&*s. So, anything +y will have a positive angle, -y will have neg angle.
                 let mut targ_angle = y.atan2(x) * (180.0 / 3.14159265358979323846);
 
@@ -40,6 +41,8 @@ impl<'a> System<'a> for AntennaReceiverSystem {
 
                 if target_hit {
                     println!("Radar detected emission from angle: {}", antenna_pos.direction);
+                    let time = range / (3.0 * (100000000.0));
+                    let power = em.power;
                 }
             
                 match entities.delete(em_entity) {
