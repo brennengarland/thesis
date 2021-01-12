@@ -52,7 +52,7 @@ fn main() {
     // println!("Avg RCS: {}", targ_rcs.avg_rcs);
 
     // An entity may or may not contain some component
-    let _radar = world.create_entity().with(Position{x: 0.0, y: 0.0, z: 1.0, direction: 5.0})
+    let _radar: specs::Entity = world.create_entity().with(Position{x: 0.0, y: 0.0, z: 1.0, direction: 5.0})
     .with(Antenna{
         frequency: frequency, 
         gain: 10.0_f32.powf(gain / 10.0), 
