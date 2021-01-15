@@ -1,5 +1,9 @@
 use specs::prelude::*;
-use crate::components::{TargetIllumination, Position, EMWave, Antenna};
+use crate::components::{TargetIllumination, Position, EMWave, Antenna, Illumination};
+
+// fn jamming_signal(illum: &Illumination, pos: &Position, ant: &Antenna) -> EMWave {
+    
+// }
 
 pub struct JammingSystem;
 impl<'a> System<'a> for JammingSystem {
