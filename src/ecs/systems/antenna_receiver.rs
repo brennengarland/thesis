@@ -1,5 +1,4 @@
-use specs::prelude::*;
-use crate::components::{Position, EMWave, Antenna};
+use super::*;
 
 pub struct AntennaReceiverSystem;
 // Radar Sensor reads from environment

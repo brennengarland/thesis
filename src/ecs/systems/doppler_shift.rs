@@ -1,6 +1,4 @@
-use specs::prelude::*;
-use crate::components::{Velocity, TargetIllumination, Illumination};
-// use std::f32::consts::
+use super::*;
 
 fn doppler_shift(vel: &Velocity, illum: &Illumination) -> f32 {
     let tot_vel = (vel.x.powi(2) + vel.y.powi(2) + vel.z.powi(2)).sqrt();

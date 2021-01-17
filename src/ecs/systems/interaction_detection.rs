@@ -1,5 +1,4 @@
-use specs::prelude::*;
-use crate::components::{Position, EMWave, TargetIllumination, RCS, Illumination};
+use super::*;
 use std::f32::consts::PI;
 
 /// Returns the angle, in degrees, between two points, an emitter and target, from the perspective of the emitter

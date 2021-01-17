@@ -1,5 +1,4 @@
-use specs::prelude::*;
-use crate::components::{Antenna, EMWave, Position};
+use super::*;
 
 pub struct TransmitSignal;
 impl<'a> System<'a> for TransmitSignal {

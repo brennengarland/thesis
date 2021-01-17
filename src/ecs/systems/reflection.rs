@@ -1,5 +1,4 @@
-use specs::prelude::*;
-use crate::components::{TargetIllumination, Position, EMWave};
+use super::*;
 
 // Creates an emission from the absorption information
 pub struct ReflectionSystem;

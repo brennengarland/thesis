@@ -3,13 +3,11 @@
 use specs::prelude::*;
 use std::{thread, time, fs};
 
-// Import systems
-mod systems;
-use systems::*;
+mod ecs;
+use ecs::*;
 
-// Import Components
-mod components;
-use components::*;
+mod data;
+use data::*;
 
 fn main() {
 

@@ -1,5 +1,5 @@
-use specs::prelude::*;
-use crate::components::{Position, Velocity, Antenna};
+use super::*;
+
 
 fn move_entity(pos: &mut Position, vel: &Velocity) {
     pos.x += vel.x;

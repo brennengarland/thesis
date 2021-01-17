@@ -1,5 +1,4 @@
-use specs::prelude::*;
-use crate::components::{TargetIllumination, Position, EMWave, Antenna, Illumination};
+use super::*;
 
 // fn jamming_signal(illum: &Illumination, pos: &Position, ant: &Antenna) -> EMWave {
     
