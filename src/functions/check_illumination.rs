@@ -1,4 +1,4 @@
-// use super::*;
+use super::*;
 
 /// Returns true if an angle is in a range, returns false otherwise
 pub fn check_illumination(em_width: f32, em_dir: f32, input_angle: f32) -> bool {
