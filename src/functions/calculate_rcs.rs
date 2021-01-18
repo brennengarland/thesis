@@ -22,3 +22,19 @@ pub fn calculate_rcs(angle: f32, rcs_angles: &Vec<f32>, rcs_values: &Vec<f32>) -
 }
 
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rcs() {
+        let angle = [0.0, 10.0, 100.0, 355.0];
+        let angles = vec![0.0, 10.0, 200.0];
+        let values = vec![10.0, 50.0, 100.0];
+        let truth = [10.0, 50.0, 100.0, 100.0];
+
+        for n in 0..angle.len() {
+            assert_eq!(calculate_rcs(angle[n], &angles, &values), truth[n]);
+        }
+    }
+}
