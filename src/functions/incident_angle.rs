@@ -1,3 +1,6 @@
+use super::*;
+use std::f32::consts::PI;
+
 /// Returns the angle, in degrees, between two points, an emitter and target, from the perspective of the emitter
 fn incident_angle(emitter: &Position, target: &Position) -> f32 {
     let y_diff = target.y - emitter.y;

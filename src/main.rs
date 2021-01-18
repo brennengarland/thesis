@@ -9,6 +9,9 @@ use ecs::*;
 mod data;
 use data::*;
 
+mod functions;
+use functions::*;
+
 fn main() {
 
     let mut world = World::new();

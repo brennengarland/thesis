@@ -8,3 +8,5 @@ mod components;
 pub use components::*;
 
 pub use crate::data::*;
+
+pub use crate::functions::*;

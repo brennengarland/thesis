@@ -1,18 +1,5 @@
 use super::*;
-use std::f32::consts::PI;
-
-/// Returns the angle, in degrees, between two points, an emitter and target, from the perspective of the emitter
-fn incident_angle(emitter: &Position, target: &Position) -> f32 {
-    let y_diff = target.y - emitter.y;
-    let x_diff = target.x - emitter.x;
-    let angle = y_diff.atan2(x_diff) * (180.0 / PI);
-    if angle < 0.0 {
-        return 360.0 + angle
-    } else {
-        return angle;
-    }
-}
-
+use crate::functions;
 /// Returns true if an angle is in a range, returns false otherwise
 fn check_illumination(em_width: f32, em_dir: f32, input_angle: f32) -> bool {
     let mut angle = input_angle;
@@ -50,7 +37,7 @@ impl<'a> System<'a> for InteractionDetection {
         for (em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
             // Loops through entities with only a position, illumination, and RCS. Should just be our 'targets'
             for(targ_rcs, targ_pos, ill) in (&rcs, &positions, &mut illumination).join() {
-                let mut angle = incident_angle(em_pos, targ_pos);
+                let mut angle = functions::incident_angle(em_pos, targ_pos);
                 if check_illumination(em.azimuth_width, em_pos.direction, angle) {
                     // Power received: Pr = (Pt * G^2 * lambda^2 * rcs) / ((4pi)^3 * R^4)
                     println!("!!!!Target Hit!!!!");
