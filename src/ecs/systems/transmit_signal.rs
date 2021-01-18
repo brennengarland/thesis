@@ -23,23 +23,3 @@ impl<'a> System<'a> for TransmitSignal {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_transmit() {
-        let antenna = Antenna{
-            frequency: 50.0,
-            gain: 10.0,
-            power: 100.0,
-            wavelength: 100.0,
-            elevation_beam_width: 10.0,
-            azimuth_beam_width: 10.0
-        };
-        let tranmitter = TransmitSignal;
-        // tranmitter.run((antenna, EMWave{}, positions, entities, updater));
-
-    }
-}

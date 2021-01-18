@@ -1,16 +1,5 @@
 use super::*;
 
-
-fn move_entity(pos: &mut Position, vel: &Velocity) {
-    pos.x += vel.x;
-    pos.y += vel.y;
-}
-
-fn rotate_entity(pos: &mut Position, sen: &Antenna) {
-    pos.direction = (pos.direction + sen.azimuth_beam_width / 2.0) % 360.0;
-
-}
-
 // Changes the position of each entity with position and velocity
 pub struct Movement;
 impl<'a> System<'a> for Movement {

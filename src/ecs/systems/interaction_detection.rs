@@ -1,24 +1,4 @@
 use super::*;
-use crate::functions;
-/// Returns true if an angle is in a range, returns false otherwise
-fn check_illumination(em_width: f32, em_dir: f32, input_angle: f32) -> bool {
-    let mut angle = input_angle;
-    if (em_dir + (em_width / 2.0)) >= 360.0 || (em_dir - (em_width / 2.0)) <= 0.0 {
-        if angle <= em_width / 2.0 {
-            angle = angle + 360.0;
-        }
-        if em_dir >= 0.0 {
-            if(angle - em_dir - 360.0).abs() <= (em_width / 2.0) {
-                return true;
-            }
-        }
-    } 
-    if (angle - em_dir).abs() <= (em_width / 2.0)  {
-        return true;
-    }
-
-    return false;
-}
 
 // Detects Interactions
 pub struct InteractionDetection;
@@ -31,13 +11,12 @@ impl<'a> System<'a> for InteractionDetection {
         Entities<'a>,
     );
 
-
     fn run(&mut self, (positions, emissions, mut illumination, rcs, entities): Self::SystemData) {
         // Loop through all of the emissions. em_entity is just an identifier
         for (em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
             // Loops through entities with only a position, illumination, and RCS. Should just be our 'targets'
             for(targ_rcs, targ_pos, ill) in (&rcs, &positions, &mut illumination).join() {
-                let mut angle = functions::incident_angle(em_pos, targ_pos);
+                let mut angle = incident_angle(em_pos, targ_pos);
                 if check_illumination(em.azimuth_width, em_pos.direction, angle) {
                     // Power received: Pr = (Pt * G^2 * lambda^2 * rcs) / ((4pi)^3 * R^4)
                     println!("!!!!Target Hit!!!!");

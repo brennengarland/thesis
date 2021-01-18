@@ -1,9 +1,5 @@
 use super::*;
 
-// fn jamming_signal(illum: &Illumination, pos: &Position, ant: &Antenna) -> EMWave {
-    
-// }
-
 pub struct JammingSystem;
 impl<'a> System<'a> for JammingSystem {
     type SystemData = (

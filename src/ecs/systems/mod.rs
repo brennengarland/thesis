@@ -1,7 +1,5 @@
 use super::*;
 
-use crate::functions::*;
-
 mod antenna_receiver;
 pub use antenna_receiver::AntennaReceiverSystem;
 
