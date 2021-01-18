@@ -15,12 +15,3 @@ impl<'a> System<'a> for DopplerShiftSystem {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_doppler_shift() {
-    }
-}

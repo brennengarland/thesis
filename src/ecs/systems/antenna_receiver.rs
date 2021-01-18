@@ -11,7 +11,7 @@ impl<'a> System<'a> for AntennaReceiverSystem {
     );
 
     fn run(&mut self, (positions, emissions, antennas, entities) : Self::SystemData) {
-        for (antenna, antenna_pos) in (&antennas, &positions).join() {
+        for (_antenna, antenna_pos) in (&antennas, &positions).join() {
             for(em_entity, em, em_pos) in (&*entities, &emissions, &positions).join() {
                 let y = antenna_pos.y - em_pos.y;
                 let x = antenna_pos.x - em_pos.x;
@@ -40,8 +40,8 @@ impl<'a> System<'a> for AntennaReceiverSystem {
 
                 if target_hit {
                     println!("Radar detected emission from angle: {}", antenna_pos.direction);
-                    let time = range / (3.0 * (100000000.0));
-                    let power = em.power;
+                    let _time = range / (3.0 * (100000000.0));
+                    let _power = em.power;
                 }
             
                 match entities.delete(em_entity) {

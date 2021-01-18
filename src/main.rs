@@ -3,14 +3,13 @@
 use specs::prelude::*;
 use std::{thread, time, fs};
 
+// Deleting these causes error in ECS package, not sure why!
+mod data;
+mod functions;
+
+// Import our ECS program that ties together our data and functions
 mod ecs;
 use ecs::*;
-
-mod data;
-use data::*;
-
-mod functions;
-use functions::*;
 
 fn main() {
 
@@ -41,7 +40,7 @@ fn main() {
     let frequency = 9400000000.0;   // Hz
 
     // TARGET INFO
-    let rcs = 1.0;                 // m^2
+    let _rcs = 1.0;                 // m^2
     let targ_x = 100.0;          // m from sensor
     let targ_y = 50.0;
     let targ_z = 0.0;
@@ -76,7 +75,7 @@ fn main() {
     // About 60 frames / sec
     // let runtime = time::Duration::from_micros(16)
     loop {
-        let start = time::Instant::now();
+        let _start = time::Instant::now();
         // TransmitSignal.run_now(&world);
         transmission.dispatch(&world);
         world.maintain();

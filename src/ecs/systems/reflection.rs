@@ -29,9 +29,14 @@ impl<'a> System<'a> for ReflectionSystem {
 
         while new_positions.len() != 0 {
             let new_entity = entities.create();
-            // println!("Emission Direction: {}", position.direction);
-            position.insert(new_entity, new_positions.remove(0));
-            emission.insert(new_entity, new_emissions.remove(0));
+            match position.insert(new_entity, new_positions.remove(0)) {
+                Err(e) => println!("{:?}", e),
+                _ => ()
+            }
+            match emission.insert(new_entity, new_emissions.remove(0)) {
+                Err(e) => println!("{:?}", e),
+                _ => ()
+            }
         }
     }
 }

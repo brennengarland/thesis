@@ -19,7 +19,6 @@ impl<'a> System<'a> for JammingSystem {
             for ill in target.illuminations.iter() {
                 println!("New Jamming EM Wave: {}", ill.angle);
                 let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: pos.direction};
-                let p_r = ill.power * ill.rcs;
                 let emission = EMWave{power: (ant.power*ant.gain), wavelength: ant.wavelength, frequency: ant.frequency, azimuth_width: ant.azimuth_beam_width, elevation_width: ant.elevation_beam_width};
                 // println!("Emission Direction: {}", position.direction);
                 new_positions.push(position);
@@ -29,9 +28,14 @@ impl<'a> System<'a> for JammingSystem {
 
         while new_positions.len() != 0 {
             let new_entity = entities.create();
-            // println!("Emission Direction: {}", position.direction);
-            position.insert(new_entity, new_positions.remove(0));
-            emission.insert(new_entity, new_emissions.remove(0));
+            match position.insert(new_entity, new_positions.remove(0)) {
+                Err(e) => println!("{:?}", e),
+                _ => ()
+            }
+            match emission.insert(new_entity, new_emissions.remove(0)) {
+                Err(e) => println!("{:?}", e),
+                _ => ()
+            }
         }
     }
 }

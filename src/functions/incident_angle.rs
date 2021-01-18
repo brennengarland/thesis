@@ -12,3 +12,15 @@ pub fn incident_angle(emitter: &Position, target: &Position) -> f32 {
         return angle;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_angle() {
+        let emitter = Position{x: 0.0, y: 0.0, z: 0.0, direction: 0.0};
+        let target = Position{x: -50.0, y: -100.0, z: 0.0, direction: 180.0};
+        assert_eq!(incident_angle(&emitter, &target), 243.43497);
+    }
+}

@@ -4,13 +4,12 @@ pub struct TransmitSignal;
 impl<'a> System<'a> for TransmitSignal {
     type SystemData = (
         ReadStorage<'a, Antenna>,
-        WriteStorage<'a, EMWave>,
         WriteStorage<'a, Position>,
         Entities<'a>,
         Read<'a, LazyUpdate>
     );
 
-    fn run(&mut self, (antennas, mut em_waves, mut positions, entities, updater): Self::SystemData) {
+    fn run(&mut self, (antennas,  mut positions, entities, updater): Self::SystemData) {
         // Must Read from each radar system and save values, then create the new emission afterwards
         // because we cannot iterate over positions and write to them at the same time.
         for (ant, pos) in (&antennas, &mut positions).join() {
