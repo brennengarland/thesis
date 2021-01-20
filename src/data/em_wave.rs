@@ -1,4 +1,5 @@
 #[derive(Debug)]
+#[derive(PartialEq, PartialOrd)]
 pub struct EMWave {
     pub power: f32,
     pub wavelength: f32,

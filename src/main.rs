@@ -59,16 +59,22 @@ fn main() {
         power: (p_t * 1000.0), 
         wavelength: ((3.0 * 100000000.0) / frequency),
         azimuth_beam_width: 10.0,
-        elevation_beam_width: 20.0,
-        }).build();
+        elevation_beam_width: 20.0
+    }).build();
 
     let _target1 = world.create_entity()
-    .with(Position{x: targ_x, y: targ_y, z: targ_z, direction: 0.0})
-    .with(targ_rcs)
-    .with(Velocity{x: -10.0, y: 0.0, z: 0.0})
-    .with(TargetIllumination{illuminations: Vec::new(),})
-    // .with(Velocity{x: -50.0, y: -100.0, z: -10.0})
-    .build();
+    .with(Position{
+        x: targ_x, 
+        y: targ_y, 
+        z: targ_z, 
+        direction: 0.0
+    }).with(targ_rcs).with(Velocity{
+        x: -10.0, 
+        y: 0.0, 
+        z: 0.0
+    }).with(TargetIllumination{
+        illuminations: Vec::new()
+    }).build();
 
 
     // let runtime = time::Duration::from_secs(1);

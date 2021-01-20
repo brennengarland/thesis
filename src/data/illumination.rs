@@ -1,4 +1,5 @@
 #[derive(Debug)]
+#[derive(PartialEq, PartialOrd)]
 pub struct Illumination {
     pub power: f32,
     pub lambda: f32,

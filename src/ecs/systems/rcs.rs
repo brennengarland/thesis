@@ -15,3 +15,68 @@ impl<'a> System<'a> for RCSSystem {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rcs() {
+        pub struct Tester;
+        impl<'a> System<'a> for Tester {
+            type SystemData = ReadStorage<'a, TargetIllumination>;
+            
+            fn run(&mut self, illuminations: Self::SystemData) {
+                for illums in (&illuminations).join() {
+                    for illum in illums.illuminations.iter() {
+                        assert_eq!(illum, &Illumination{
+                            angle: 90.0,
+                            frequency: 10.0,
+                            lambda: 100.0,
+                            rcs: 90.0,
+                            power: 10.0
+                        });
+                    }
+                }
+            }
+            
+        }
+
+        // Create world
+        let mut world = World::new();
+
+        // Register the components to be used
+        world.register::<RCS>();
+        world.register::<TargetIllumination>();
+
+        // Initialize systems
+        let mut sys = RCSSystem;
+        System::setup(&mut sys, &mut world);
+
+        let mut tester = Tester;
+        System::setup(&mut tester, &mut world);
+
+        // Create illumination entity
+        let _target_illum = world.create_entity()
+        .with(RCS{
+            angles: vec![0.0, 90.0, 180.0, 270.0],
+            values: vec![0.0, 90.0, 180.0, 270.0],
+            avg_rcs: 180.0
+        })
+        .with(TargetIllumination{
+            illuminations: vec![Illumination{
+                angle: 90.0,
+                frequency: 10.0,
+                lambda: 100.0,
+                rcs: 1.0,
+                power: 10.0
+            }]
+        }).build();
+
+        // Run the system
+        sys.run_now(&world);
+        world.maintain();
+        // Run test 
+        tester.run_now(&world);
+    }
+}

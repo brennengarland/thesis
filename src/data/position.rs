@@ -1,3 +1,4 @@
+#[derive(PartialEq, PartialOrd)]
 #[derive(Debug)]
 pub struct Position {
     pub x: f32, // meters

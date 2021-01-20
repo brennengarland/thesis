@@ -23,7 +23,7 @@ impl<'a> System<'a> for InteractionDetection {
                     println!("Target Angle: {} at {}", angle, targ_pos.x);
                     // println!("Emission Direction: {}\tWidth: {}", em_dir, em_width);
                     let range = ((em_pos.x - targ_pos.x).powi(2) + (em_pos.y - targ_pos.y).powi(2)).sqrt();
-                    let power = em.power / (4.0 * 3.14 * range.powi(2));
+                    let power = em.power / (4.0 * std::f32::consts::PI * range.powi(2));
                     let new_abs = Illumination{power: power, lambda: em.wavelength, frequency: em.frequency, angle: angle, rcs: targ_rcs.avg_rcs};
                     ill.illuminations.push(new_abs);
                 }
@@ -35,3 +35,82 @@ impl<'a> System<'a> for InteractionDetection {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_interaction() {
+        pub struct Tester;
+        impl<'a> System<'a> for Tester {
+            type SystemData = ReadStorage<'a, TargetIllumination>;
+            
+            fn run(&mut self, illuminations: Self::SystemData) {
+                for illums in (&illuminations).join() {
+                    for illum in illums.illuminations.iter() {
+                        assert_eq!(illum, &Illumination{
+                            angle: 225.0,
+                            frequency: 100.0,
+                            lambda: 100.0,
+                            rcs: 0.0,
+                            power: 0.00039788734
+                        });
+                    }
+                }
+            }
+            
+        }
+
+        // Create world
+        let mut world = World::new();
+
+        // Register the components to be used
+        world.register::<EMWave>();
+        world.register::<Position>();
+        world.register::<Antenna>();
+
+        let mut sys = InteractionDetection;
+        System::setup(&mut sys, &mut world);
+
+        let mut tester = Tester;
+        System::setup(&mut tester, &mut world);
+
+        // Create EMWave Entity
+        let _em_wave = world.create_entity()
+        .with(EMWave{
+            frequency: 100.0,
+            power: 100.0,
+            wavelength: 100.0,
+            azimuth_width: 20.0,
+            elevation_width: 10.0
+        }).with(Position{
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            direction: 45.0
+        }).build();
+
+        // Create target entity
+        let _target1 = world.create_entity()
+        .with(Position{
+            x: 100.0, 
+            y: 100.0, 
+            z: 0.0, 
+            direction: 0.0
+        }).with(RCS{
+            angles: vec![0.0, 90.0, 180.0, 270.0],
+            values: vec![0.0, 90.0, 180.0, 270.0],
+            avg_rcs: 180.0
+        }).with(TargetIllumination{
+            illuminations: Vec::new()
+        }).build();
+
+        // Run the system
+        sys.run_now(&world);
+        world.maintain();
+        // Run test 
+        tester.run_now(&world);
+    }
+}
+

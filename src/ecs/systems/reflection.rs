@@ -17,7 +17,7 @@ impl<'a> System<'a> for ReflectionSystem {
         // Iterate through each target
         for (target, pos) in (&mut target_illumination, &position).join() {
             for ill in target.illuminations.iter() {
-                let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: (180.0 + ill.angle) % 360.0};
+                let position = Position{x: pos.x, y: pos.y, z: pos.z, direction: ill.angle};
                 let p_r = ill.power * ill.rcs;
                 let emission = EMWave{power: p_r, wavelength: ill.lambda, frequency: ill.frequency, azimuth_width: 20.0, elevation_width: 20.0};
                 // println!("Emission Direction: {}", position.direction);
@@ -38,5 +38,79 @@ impl<'a> System<'a> for ReflectionSystem {
                 _ => ()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reflection() {
+        pub struct Tester;
+        impl<'a> System<'a> for Tester {
+            type SystemData = (
+                ReadStorage<'a, EMWave>,
+                ReadStorage<'a, Position>
+            );
+            
+            fn run(&mut self, (em_waves, positions): Self::SystemData) {
+                for (em_wave, pos) in (&em_waves, &positions).join() {
+                    assert_eq!(em_wave , &EMWave{
+                        power: 10.0, 
+                        wavelength: 100.0, 
+                        frequency: 10.0, 
+                        azimuth_width: 20.0, 
+                        elevation_width: 20.0
+                    });
+                    assert_eq!(pos, &Position{
+                        x: 0.0,
+                        y: 0.0,
+                        z: 1.0,
+                        direction: 270.0
+                    });
+                }
+            }
+            
+        }
+
+        // Create world
+        let mut world = World::new();
+
+        // Register the components to be used
+        world.register::<EMWave>();
+        world.register::<Position>();
+        world.register::<TargetIllumination>();
+
+        // Initialize systems
+        let mut sys = ReflectionSystem;
+        System::setup(&mut sys, &mut world);
+
+        let mut tester = Tester;
+        System::setup(&mut tester, &mut world);
+
+        // Create illumination entity
+        let _target_illum = world.create_entity()
+        .with(Position{
+            x: 0.0, 
+            y: 0.0, 
+            z: 1.0, 
+            direction: 5.0
+        })
+        .with(TargetIllumination{
+            illuminations: vec![Illumination{
+                angle: 90.0,
+                frequency: 10.0,
+                lambda: 100.0,
+                rcs: 1.0,
+                power: 10.0
+            }]
+        }).build();
+
+        // Run the system
+        sys.run_now(&world);
+        world.maintain();
+        // Run test 
+        tester.run_now(&world);
     }
 }

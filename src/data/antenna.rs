@@ -1,3 +1,4 @@
+#[derive(PartialEq, PartialOrd)]
 #[derive(Debug)]
 pub struct Antenna {
     pub frequency: f32,         // Hz
