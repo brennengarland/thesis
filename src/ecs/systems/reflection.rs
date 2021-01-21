@@ -55,6 +55,8 @@ mod tests {
             );
             
             fn run(&mut self, (em_waves, positions): Self::SystemData) {
+                assert_eq!(em_waves.count(), 1);
+                assert_eq!(positions.count(), 2);
                 for (em_wave, pos) in (&em_waves, &positions).join() {
                     assert_eq!(em_wave , &EMWave{
                         power: 10.0, 
@@ -67,7 +69,7 @@ mod tests {
                         x: 0.0,
                         y: 0.0,
                         z: 1.0,
-                        direction: 270.0
+                        direction: 90.0
                     });
                 }
             }

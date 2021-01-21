@@ -50,17 +50,20 @@ impl<'a> System<'a> for JammingSystem {
     }
 }
 
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_transmit() {
+    fn test_jamming() {
         pub struct Tester;
         impl<'a> System<'a> for Tester {
             type SystemData = ReadStorage<'a, EMWave>;
             
             fn run(&mut self, em_waves: Self::SystemData) {
+                assert_eq!(em_waves.count(), 1);
                 for em_wave in (&em_waves).join() {
                     assert_eq!(em_wave , &EMWave{
                         power: 100.0, 
@@ -90,15 +93,19 @@ mod tests {
 
         // Create illumination entity
         let _target_illum = world.create_entity()
-        .with(Antenna{
+        .with(Position{
+            x: 100.0,
+            y: 100.0,
+            z: 0.0,
+            direction: 0.0
+        }).with(Antenna{
             frequency: 100.0, 
             gain: 10.0, 
             power: 10.0, 
             wavelength: ((3.0 * 100000000.0) / 100.0),
             azimuth_beam_width: 10.0,
             elevation_beam_width: 20.0
-        })
-        .with(TargetIllumination{
+        }).with(TargetIllumination{
             illuminations: vec![Illumination{
                 angle: 90.0,
                 frequency: 10.0,

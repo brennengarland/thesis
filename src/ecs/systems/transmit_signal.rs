@@ -47,17 +47,17 @@ mod tests {
             type SystemData = ReadStorage<'a, EMWave>;
             
             fn run(&mut self, em_waves: Self::SystemData) {
+                assert_eq!(em_waves.count(), 1);
                 for em_wave in (&em_waves).join() {
                     assert_eq!(em_wave , &EMWave{
-                        power: 100000.0, 
-                        wavelength: ((3.0 * 100000000.0) / 100.0), 
+                        power: 10000.0, 
+                        wavelength: 1000.0, 
                         frequency: 100.0, 
                         azimuth_width: 10.0, 
                         elevation_width: 20.0
                     });
                 }
             }
-            
         }
 
         // Create world
@@ -79,14 +79,14 @@ mod tests {
         .with(Position{
             x: 0.0, 
             y: 0.0, 
-            z: 1.0, 
+            z: 0.0, 
             direction: 5.0
         })
         .with(Antenna{
             frequency: 100.0, 
-            gain: 10.0_f32.powf(10.0 / 10.0), 
-            power: (10.0 * 1000.0), 
-            wavelength: ((3.0 * 100000000.0) / 100.0),
+            gain: 10.0, 
+            power: 1000.0, 
+            wavelength: 1000.0,
             azimuth_beam_width: 10.0,
             elevation_beam_width: 20.0
         }).build();

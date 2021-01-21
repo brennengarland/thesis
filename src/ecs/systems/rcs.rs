@@ -28,6 +28,8 @@ mod tests {
             
             fn run(&mut self, illuminations: Self::SystemData) {
                 for illums in (&illuminations).join() {
+                    // Make sure the system made the correct number of illuminations
+                    assert_eq!(illums.illuminations.len(), 1); 
                     for illum in illums.illuminations.iter() {
                         assert_eq!(illum, &Illumination{
                             angle: 90.0,

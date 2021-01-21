@@ -21,7 +21,6 @@ pub fn calculate_rcs(angle: f32, rcs_angles: &Vec<f32>, rcs_values: &Vec<f32>) -
     return refl_pwr;
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

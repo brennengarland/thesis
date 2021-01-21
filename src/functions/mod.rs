@@ -19,3 +19,6 @@ pub use rotate_entity::*;
 
 mod calculate_rcs;
 pub use calculate_rcs::*;
+
+mod calculate_range;
+pub use calculate_range::*;
