@@ -1,6 +1,5 @@
 use super::*;
 
-
 /// Calculates range using Euclidian distance
 pub fn calculate_range(pos1: &Position, pos2: &Position) -> f32 {
     return ((pos1.x - pos2.x).powi(2) + (pos1.y - pos2.y).powi(2)).sqrt();

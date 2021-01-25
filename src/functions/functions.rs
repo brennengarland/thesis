@@ -1,5 +1,5 @@
 // Import internal crates
-use crate::data::*;
+pub use crate::structs::*;
 
 // Make internal functions public
 mod incident_angle;
