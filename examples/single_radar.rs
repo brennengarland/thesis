@@ -1,15 +1,7 @@
-// extern crate specs;
-
 use specs::prelude::*;
 use std::{thread, time, fs};
 
-// Deleting these causes error in ECS package, not sure why!
-mod data;
-mod functions;
 
-// Import our ECS program that ties together our data and functions
-mod ecs;
-use ecs::*;
 
 fn main() {
 

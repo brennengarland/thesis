@@ -1,13 +1,7 @@
 
 use specs::{Component};
+use specs::prelude::*;
 use crate::structs::*;
-
-mod position;
-mod em_wave;
-mod antenna;
-mod target_illumination;
-mod rcs;
-mod velocity;
 
 impl Component for Antenna {
     type Storage = VecStorage<Self>;

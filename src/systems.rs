@@ -1,4 +1,6 @@
-use components::*;
+use crate::structs::*;
+use specs::prelude::*;
+use crate::functions::*;
 
 mod antenna_receiver;
 pub use antenna_receiver::AntennaReceiverSystem;
